@@ -5,11 +5,6 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::fs;
-use std::path::Path;
-
-mod module;
-use module::{Module, ModuleRegistry};
 
 // ============================================================================
 // TYPE SYSTEM
@@ -70,7 +65,7 @@ pub enum TokenType {
     
     // Keywords
     Let, Fn, Return, If, Else, While, For, In, Match, Case, Tensor, Import,
-    Try, Catch, Finally, Throw, Raise, Range, Map, As,
+    Try, Catch, Finally, Throw, Raise, Range, Map,
     
     // Identifiers
     Ident(String),
@@ -252,7 +247,6 @@ impl Lexer {
             "raise" => TokenType::Raise,
             "range" => TokenType::Range,
             "map" => TokenType::Map,
-            "as" => TokenType::As,
             "true" => TokenType::BoolLit(true),
             "false" => TokenType::BoolLit(false),
             "and" => TokenType::And,
@@ -384,7 +378,6 @@ pub enum Stmt {
     Try { try_block: Vec<Stmt>, catch_var: Option<String>, catch_block: Option<Vec<Stmt>>, finally_block: Option<Vec<Stmt>> },
     Throw { value: Box<Expr> },
     Raise { exception_type: String, message: Box<Expr> },
-    Import { module_path: String, imports: Vec<(String, Option<String>)> },  // (name, alias)
     Expr(Box<Expr>),
 }
 
@@ -396,7 +389,6 @@ pub enum Expr {
     Index { target: Box<Expr>, index: Box<Expr> },
     Slice { target: Box<Expr>, start: Option<Box<Expr>>, end: Option<Box<Expr>> },
     Ident(String),
-    ModuleAccess { module: String, member: String },
     IntLit(i64),
     FloatLit(f64),
     StringLit(String),
@@ -447,58 +439,6 @@ pub struct Parser {
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, pos: 0 }
-    }
-
-    fn parse_import(&mut self) -> Result<Stmt, String> {
-        self.advance(); // consume 'import'
-        
-        let mut imports = Vec::new();
-        
-        // Parse the module path
-        let module_path = if let TokenType::StringLit(path) = &self.current().ttype {
-            let p = path.clone();
-            self.advance();
-            p
-        } else {
-            return Err("Expected string literal for module path".to_string());
-        };
-
-        // Handle specific imports if any
-        if matches!(self.current().ttype, TokenType::LBrace) {
-            self.advance();
-            
-            while !matches!(self.current().ttype, TokenType::RBrace) {
-                if let TokenType::Ident(name) = &self.current().ttype {
-                    let member_name = name.clone();
-                    self.advance();
-                    
-                    let alias = if matches!(self.current().ttype, TokenType::As) {
-                        self.advance();
-                        if let TokenType::Ident(alias_name) = &self.current().ttype {
-                            let a = Some(alias_name.clone());
-                            self.advance();
-                            a
-                        } else {
-                            return Err("Expected identifier after 'as'".to_string());
-                        }
-                    } else {
-                        None
-                    };
-                    
-                    imports.push((member_name, alias));
-                    
-                    if matches!(self.current().ttype, TokenType::Comma) {
-                        self.advance();
-                    }
-                }
-            }
-            self.expect(|t| matches!(t, TokenType::RBrace))?;
-        } else {
-            // Import entire module
-            imports.push(("*".to_string(), None));
-        }
-        
-        Ok(Stmt::Import { module_path, imports })
     }
     
     fn current(&self) -> &Token {
@@ -555,7 +495,6 @@ impl Parser {
             TokenType::Try => self.parse_try(),
             TokenType::Throw => self.parse_throw(),
             TokenType::Raise => self.parse_raise(),
-            TokenType::Import => self.parse_import(),
             TokenType::Ident(_) => {
                 // Check for assignment or index assignment
                 let start_pos = self.pos;
@@ -1053,40 +992,6 @@ impl Parser {
         
         loop {
             match &self.current().ttype {
-                TokenType::LParen => {
-                    // Handle function calls
-                    self.advance();
-                    let mut args = Vec::new();
-                    
-                    if !matches!(self.current().ttype, TokenType::RParen) {
-                        loop {
-                            args.push(self.parse_expression()?);
-                            if !matches!(self.current().ttype, TokenType::Comma) {
-                                break;
-                            }
-                            self.advance();
-                        }
-                    }
-                    
-                    self.expect(|t| matches!(t, TokenType::RParen))?;
-                    
-                    // For module access, we need to extract the module and member
-                    expr = match expr {
-                        Expr::ModuleAccess { module, member } => {
-                            Expr::Call { 
-                                name: format!("{}.{}", module, member),
-                                args
-                            }
-                        }
-                        _ => Expr::Call {
-                            name: match expr {
-                                Expr::Ident(name) => name,
-                                _ => return Err("Expected function name".to_string())
-                            },
-                            args
-                        }
-                    };
-                }
                 TokenType::LBracket => {
                     self.advance();
                     
@@ -1162,19 +1067,7 @@ impl Parser {
                 let name = name.clone();
                 self.advance();
                 
-                if matches!(self.current().ttype, TokenType::Dot) {
-                    self.advance();
-                    if let TokenType::Ident(member) = &self.current().ttype {
-                        let member_name = member.clone();
-                        self.advance();
-                        Ok(Expr::ModuleAccess { 
-                            module: name,
-                            member: member_name 
-                        })
-                    } else {
-                        Err("Expected identifier after '.'".to_string())
-                    }
-                } else if matches!(self.current().ttype, TokenType::LParen) {
+                if matches!(self.current().ttype, TokenType::LParen) {
                     self.advance();
                     let mut args = Vec::new();
                     
@@ -1296,8 +1189,6 @@ pub enum OpCode {
     Index, IndexSet, Slice, BuildRange,
     SetupForIn, ForInNext, PopForIn,
     MatchBegin, MatchCase, MatchEnd,
-    // Module opcodes
-    ImportModule, LoadModuleMember,
 }
 
 #[derive(Debug, Clone)]
@@ -1317,7 +1208,6 @@ pub enum Value {
     Tensor { shape: Vec<usize>, data: Vec<f64> },
     Range { start: i64, end: i64, inclusive: bool },
     Exception { exc_type: String, message: String },
-    Module(Module),
     Void,
 }
 
@@ -1333,7 +1223,6 @@ impl Value {
             Value::Tensor { .. } => "Tensor",
             Value::Range { .. } => "Range",
             Value::Exception { .. } => "Exception",
-            Value::Module(_) => "module",
             Value::Void => "void",
         }
     }
@@ -1391,7 +1280,6 @@ impl fmt::Display for Value {
             Value::Exception { exc_type, message } => {
                 write!(f, "{}: {}", exc_type, message)
             }
-            Value::Module(m) => write!(f, "<module '{}'>", m.name),
             Value::Void => write!(f, "void"),
         }
     }
@@ -1403,7 +1291,6 @@ pub struct Compiler {
     var_indices: HashMap<String, usize>,
     next_var_index: usize,
     function_addresses: HashMap<String, usize>,
-    var_names: HashMap<usize, String>,
 }
 
 impl Compiler {
@@ -1414,7 +1301,6 @@ impl Compiler {
             var_indices: HashMap::new(),
             next_var_index: 0,
             function_addresses: HashMap::new(),
-            var_names: HashMap::new(),
         }
     }
     
@@ -1441,18 +1327,9 @@ impl Compiler {
         } else {
             let idx = self.next_var_index;
             self.var_indices.insert(name.to_string(), idx);
-            self.var_names.insert(idx, name.to_string());
             self.next_var_index += 1;
             idx
         }
-    }
-    
-    fn get_var_name(&self, index: usize) -> Option<String> {
-        self.var_names.get(&index).cloned()
-    }
-    
-    fn get_var_index_for_module(&mut self, module_name: &str, member_name: &str) -> usize {
-        self.get_var_index(&format!("{}.{}", module_name, member_name))
     }
     
     fn emit(&mut self, opcode: OpCode, arg: i32) {
@@ -1482,42 +1359,6 @@ impl Compiler {
                 self.compile_expr(value)?;
                 let idx = self.get_var_index(name);
                 self.emit(OpCode::StoreVar, idx as i32);
-            }
-            Stmt::Import { module_path, imports } => {
-                
-                // Get the module name from the path
-                let module_name = std::path::Path::new(&module_path)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                
-                // Load the module
-                let path_idx = self.add_constant(Value::String(module_path.clone()));
-                self.emit(OpCode::LoadConst, path_idx as i32);
-                self.emit(OpCode::ImportModule, 0);
-                
-                // Store the module itself
-                let module_idx = self.get_var_index(&module_name);
-                self.emit(OpCode::StoreVar, module_idx as i32);
-                
-                // Handle specific imports if any
-                if imports.iter().any(|(name, _)| name == "*") {
-                    // Nothing more to do - whole module is already stored
-                    return Ok(());
-                }
-                
-                for (name, alias) in imports {
-                    let member_name = alias.as_ref().unwrap_or(&name);
-                    let name_idx = self.add_constant(Value::String(name.clone()));
-                    let var_idx = self.get_var_index(member_name);
-                    
-                    // Load module and get member
-                    self.emit(OpCode::LoadVar, module_idx as i32);
-                    self.emit(OpCode::LoadConst, name_idx as i32);
-                    self.emit(OpCode::LoadModuleMember, var_idx as i32);
-                    self.emit(OpCode::StoreVar, var_idx as i32);
-                }
             }
             Stmt::IndexAssign { target, index, value } => {
                 self.compile_expr(target)?;
@@ -1708,14 +1549,6 @@ impl Compiler {
                 let idx = self.get_var_index(name);
                 self.emit(OpCode::LoadVar, idx as i32);
             }
-            Expr::ModuleAccess { module, member } => {
-                // Load the module variable (which should have _module suffix)
-                let module_idx = self.get_var_index(&(module.clone() + "_module"));
-                let member_idx = self.add_constant(Value::String(member.clone()));
-                self.emit(OpCode::LoadVar, module_idx as i32);
-                self.emit(OpCode::LoadConst, member_idx as i32);
-                self.emit(OpCode::LoadModuleMember, 0);
-            }
             Expr::Binary { left, op, right } => {
                 self.compile_expr(left)?;
                 self.compile_expr(right)?;
@@ -1746,18 +1579,19 @@ impl Compiler {
                 self.emit(opcode, 0);
             }
             Expr::Call { name, args } => {
-                // First, compile all arguments
-                for arg in args {
-                    self.compile_expr(arg)?;
-                }
-
                 match name.as_str() {
                     "print" => {
-                        self.emit(OpCode::Print, 0);
+                        for arg in args {
+                            self.compile_expr(arg)?;
+                            self.emit(OpCode::Print, 0);
+                        }
                         let idx = self.add_constant(Value::Void);
                         self.emit(OpCode::LoadConst, idx as i32);
                     }
                     "matmul" | "relu" | "sigmoid" | "tanh" | "softmax" => {
+                        for arg in args {
+                            self.compile_expr(arg)?;
+                        }
                         let opcode = match name.as_str() {
                             "matmul" => OpCode::MatMul,
                             "relu" => OpCode::Relu,
@@ -1769,16 +1603,10 @@ impl Compiler {
                         self.emit(opcode, 0);
                     }
                     _ => {
-                        // Check if this is a module function call (contains a dot)
-                        if let Some((module, member)) = name.split_once('.') {
-                            // Load the module variable (which should have _module suffix)
-                            let module_idx = self.get_var_index(&(module.to_string() + "_module"));
-                            let member_idx = self.add_constant(Value::String(member.to_string()));
-                            self.emit(OpCode::LoadVar, module_idx as i32);
-                            self.emit(OpCode::LoadConst, member_idx as i32);
-                            self.emit(OpCode::LoadModuleMember, 0);
-                            self.emit(OpCode::Call, args.len() as i32);
-                        } else if let Some(&addr) = self.function_addresses.get(name) {
+                        for arg in args {
+                            self.compile_expr(arg)?;
+                        }
+                        if let Some(&addr) = self.function_addresses.get(name) {
                             self.emit(OpCode::Call, addr as i32);
                         } else {
                             return Err(format!("Undefined function: {}", name));
@@ -1928,7 +1756,6 @@ pub struct VM {
     try_stack: Vec<TryHandler>,
     for_in_stack: Vec<ForInIterator>,
     exception: Option<Value>,
-    module_registry: ModuleRegistry,
 }
 
 impl VM {
@@ -1943,7 +1770,6 @@ impl VM {
             try_stack: Vec::new(),
             for_in_stack: Vec::new(),
             exception: None,
-            module_registry: ModuleRegistry::new(),
         }
     }
     
@@ -1982,58 +1808,6 @@ impl VM {
         }
         Ok(())
     }
-
-    fn load_module(&mut self, path: &str) -> Result<Module, String> {
-        // Add .ns extension if not present
-        let full_path = if path.ends_with(".ns") {
-            path.to_string()
-        } else {
-            format!("{}.ns", path)
-        };
-
-        // First check if file exists
-        if !Path::new(&full_path).exists() {
-            return Err(format!("Module not found: '{}' (with .ns)", path));
-        }
-
-        let source = fs::read_to_string(Path::new(&full_path))
-            .map_err(|e| format!("Failed to read module file '{}': {}", full_path, e))?;
-
-        let mut lexer = Lexer::new(&source);
-        let tokens = lexer.tokenize()?;
-        
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse()?;
-        
-        let mut compiler = Compiler::new();
-        compiler.compile(&ast)?;
-        
-        let mut module_vm = VM::new(
-            compiler.get_instructions().to_vec(),
-            compiler.get_constants().to_vec(),
-        );
-        
-        module_vm.run()?;
-
-        let name = Path::new(path)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        let mut module = Module::new(name);
-        
-        // Transfer public variables to module
-        for (i, value) in module_vm.variables.iter().enumerate() {
-            if let Some(name) = compiler.get_var_name(i) {
-                if !name.starts_with('_') {
-                    module.set_member(name, value.clone());
-                }
-            }
-        }
-
-        Ok(module)
-    }
     
     fn handle_exception(&mut self) -> Result<bool, String> {
         if let Some(handler) = self.try_stack.pop() {
@@ -2065,29 +1839,6 @@ impl VM {
             OpCode::StoreVar => {
                 let val = self.pop()?;
                 self.variables[instr.arg as usize] = val;
-            }
-            OpCode::ImportModule => {
-                let path = self.pop()?;
-                if let Value::String(p) = path {
-                    let module = self.load_module(&p)?;
-                    self.push(Value::Module(module));
-                } else {
-                    return Err("Expected string as module path".to_string());
-                }
-            }
-            OpCode::LoadModuleMember => {
-                let member_name = self.pop()?;
-                let module_val = self.pop()?;
-                
-                if let (Value::String(name), Value::Module(module)) = (member_name, module_val) {
-                    if let Some(value) = module.get_public_member(&name) {
-                        self.push(value.clone());
-                    } else {
-                        return Err(format!("Module member '{}' not found or is private", name));
-                    }
-                } else {
-                    return Err("Invalid module member access".to_string());
-                }
             }
             OpCode::Add => {
                 let b = self.pop()?;
@@ -2601,13 +2352,7 @@ impl VM {
 // MAIN API
 // ============================================================================
 
-pub fn compile_and_run_file(path: &str) -> Result<(), String> {
-    let source = fs::read_to_string(Path::new(path))
-        .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
-    compile_and_run(&source, Some(path))
-}
-
-pub fn compile_and_run(source: &str, file_path: Option<&str>) -> Result<(), String> {
+pub fn compile_and_run(source: &str) -> Result<(), String> {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize()?;
     
@@ -2651,7 +2396,7 @@ fn main() {
         let slice3 = numbers[2:]
         print(slice3)
     "#;
-    if let Err(e) = compile_and_run(code1, None) {
+    if let Err(e) = compile_and_run(code1) {
         eprintln!("Error: {}", e);
     }
     
@@ -2671,7 +2416,7 @@ fn main() {
         person["country"] = "Nigeria"
         print(person["country"])
     "#;
-    if let Err(e) = compile_and_run(code2, None) {
+    if let Err(e) = compile_and_run(code2) {
         eprintln!("Error: {}", e);
     }
     
@@ -2688,7 +2433,7 @@ fn main() {
         let range3 = 10..5
         print(range3)
     "#;
-    if let Err(e) = compile_and_run(code3, None) {
+    if let Err(e) = compile_and_run(code3) {
         eprintln!("Error: {}", e);
     }
     
@@ -2712,7 +2457,7 @@ fn main() {
             print(pair)
         }
     "#;
-    if let Err(e) = compile_and_run(code4, None) {
+    if let Err(e) = compile_and_run(code4) {
         eprintln!("Error: {}", e);
     }
     
@@ -2747,7 +2492,7 @@ fn main() {
             print(e)
         }
     "#;
-    if let Err(e) = compile_and_run(code5, None) {
+    if let Err(e) = compile_and_run(code5) {
         eprintln!("Error: {}", e);
     }
     
@@ -2779,7 +2524,7 @@ fn main() {
         classify_value(true)
         classify_value(false)
     "#;
-    if let Err(e) = compile_and_run(code6, None) {
+    if let Err(e) = compile_and_run(code6) {
         eprintln!("Error: {}", e);
     }
     
@@ -2799,7 +2544,7 @@ fn main() {
         let sliced = modified[1:4]
         print(sliced)
     "#;
-    if let Err(e) = compile_and_run(code7, None) {
+    if let Err(e) = compile_and_run(code7) {
         eprintln!("Error: {}", e);
     }
     
@@ -2840,7 +2585,7 @@ fn main() {
             print("Key not found")
         }
     "#;
-    if let Err(e) = compile_and_run(code8, None) {
+    if let Err(e) = compile_and_run(code8) {
         eprintln!("Error: {}", e);
     }
     
@@ -2857,7 +2602,7 @@ fn main() {
         let activated = relu(weights)
         print(activated[2])
     "#;
-    if let Err(e) = compile_and_run(code9, None) {
+    if let Err(e) = compile_and_run(code9) {
         eprintln!("Error: {}", e);
     }
     
@@ -2891,7 +2636,7 @@ fn main() {
         process_values(10, 2)
         process_values(10, 0)
     "#;
-    if let Err(e) = compile_and_run(code10, None) {
+    if let Err(e) = compile_and_run(code10) {
         eprintln!("Error: {}", e);
     }
     
@@ -2913,7 +2658,7 @@ fn main() {
             print(user)
         }
     "#;
-    if let Err(e) = compile_and_run(code11, None) {
+    if let Err(e) = compile_and_run(code11) {
         eprintln!("Error: {}", e);
     }
     
@@ -2937,7 +2682,7 @@ fn main() {
             print(data[i])
         }
     "#;
-    if let Err(e) = compile_and_run(code12, None) {
+    if let Err(e) = compile_and_run(code12) {
         eprintln!("Error: {}", e);
     }
     
@@ -2950,35 +2695,5 @@ fn main() {
     println!("  ✓ For-In Loops");
     println!("  ✓ Custom Exceptions (raise)");
     println!("  ✓ Pattern Matching (match/case)");
-    println!("  ✓ Module System & Imports");
     println!("{}", "=".repeat(60));
-
-    // Example of module system
-    println!("\nExample 13: Module System");
-    println!("{}", "-".repeat(50));
-    let code13 = r#"
-        // Import the math module
-        import "examples/math_module"
-        
-        // Use the public functions and constants
-        print("PI = " + math_module.PI)
-        print("2 + 3 = " + math_module.add(2, 3))
-        print("4 * 5 = " + math_module.multiply(4, 5))
-        
-        try {
-            print(math_module._private_constant)
-        } catch (e) {
-            print("Cannot access private members:", e)
-        }
-
-        try {
-            math_module._internal_helper()
-        } catch (e) {
-            print("Cannot access private functions:", e)
-        }
-    "#;
-    
-    if let Err(e) = compile_and_run(code13, None) {
-        eprintln!("Error: {}", e);
-    }
 }
