@@ -50,7 +50,3 @@ Troubleshooting
     rustup default stable
 
 - Edition mismatch: `Cargo.toml` uses `edition = "2024"` which requires a recent Rust toolchain. If your toolchain is older, update with `rustup update`.
-
-Next steps (developer tasks)
-- Add a CLI entrypoint to accept a source file path or REPL mode.
-- Add integration tests and CI to validate cross-platform builds.
