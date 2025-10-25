@@ -1,0 +1,42 @@
+// Math module with some basic mathematical operations
+
+// Public constants
+let PI = 3.14159265359
+let E = 2.71828182846
+
+// Private constant (starts with _)
+let _private_constant = 42
+
+// Basic arithmetic functions
+fn add(a, b) {
+    return a + b
+}
+
+fn subtract(a, b) {
+    return a - b
+}
+
+fn multiply(a, b) {
+    return a * b
+}
+
+fn divide(a, b) {
+    if b == 0 {
+        raise DivisionError("Division by zero")
+    }
+    return a / b
+}
+
+// Private helper function (starts with _)
+fn _internal_helper() {
+    print("This is a private function")
+}
+
+// More advanced mathematical functions
+fn square(x) {
+    return multiply(x, x)
+}
+
+fn cube(x) {
+    return multiply(x, multiply(x, x))
+}
