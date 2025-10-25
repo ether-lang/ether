@@ -1,6 +1,6 @@
 # Ether
 
-Ether is a research-grade, high-performance interpreted language implementation focused on language features for AI-oriented programming. It provides a compact lexer, parser, compiler, and a small virtual machine (VM) for executing a bytecode-like instruction set. The repository currently contains a prototype interpreter/compiler written in Rust.
+Ether is a research-grade, high-performance interpreted language implementation focused on language features for machine learning and AI-oriented programming. It provides a compact lexer, parser, compiler, and a small virtual machine (VM) for executing a bytecode-like instruction set. The repository currently contains a prototype interpreter/compiler written in Rust.
 
 Authors
 - Richard Ore
