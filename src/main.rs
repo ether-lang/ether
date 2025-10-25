@@ -1,4 +1,4 @@
-// NeuralScript: High-Performance AI Language
+// ZenScript: High-Performance AI Language
 
 #![allow(unused_variables)]
 #![allow(dead_code)]
@@ -2375,7 +2375,7 @@ pub fn compile_and_run(source: &str) -> Result<(), String> {
 // ============================================================================
 
 fn main() {
-    println!("NeuralScript v0.2 - Advanced Features Demo");
+    println!("ZenScript v0.2 - Advanced Features Demo");
     println!("{}", "=".repeat(60));
     
     // Example 1: List Indexing and Slicing
@@ -2687,7 +2687,7 @@ fn main() {
     }
     
     println!("\n{}", "=".repeat(60));
-    println!("NeuralScript v0.2 Demo Complete!");
+    println!("ZenScript v0.2 Demo Complete!");
     println!("All Advanced Features Implemented:");
     println!("  ✓ List/Tensor Indexing & Slicing");
     println!("  ✓ Map/Hash Structure");
