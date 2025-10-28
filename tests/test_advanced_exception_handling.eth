@@ -1,0 +1,25 @@
+fn divide_safe(a, b) {
+    if b == 0 {
+        raise DivisionError("Cannot divide by zero")
+    }
+    return a / b
+}
+
+fn process_values(x, y) {
+    try {
+        let result = divide_safe(x, y)
+        print(result)
+        
+        if result > 100 {
+            raise ValueError("Result too large")
+        }
+    } catch (e) {
+        print("Error during processing:")
+        print(e)
+    } finally {
+        print("Processing completed")
+    }
+}
+
+process_values(10, 2)
+process_values(10, 0)

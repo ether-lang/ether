@@ -1,0 +1,15 @@
+print("Count up:")
+for i in 1..=5 {
+    print(i)
+}
+
+print("Count down:")
+for i in 5..1 {
+    print(i)
+}
+
+print("Step through list with range:")
+let data = ["a", "b", "c", "d", "e"]
+for i in 0..3 {
+    print(data[i])
+}

@@ -1,0 +1,11 @@
+let person = {
+    "name": "Alice",
+    "age": 30,
+    "city": "Lagos"
+}
+
+print(person["name"])
+print(person["age"])
+
+person["country"] = "Nigeria"
+print(person["country"])

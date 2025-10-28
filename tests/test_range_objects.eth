@@ -1,0 +1,8 @@
+let range1 = 1..5
+print(range1)
+
+let range2 = 1..=5
+print(range2)
+
+let range3 = 10..5
+print(range3)

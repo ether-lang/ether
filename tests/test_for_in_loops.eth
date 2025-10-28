@@ -1,0 +1,15 @@
+print("Iterating over list:")
+for item in [1, 2, 3, 4, 5] {
+    print(item)
+}
+
+print("Iterating over range:")
+for i in 0..3 {
+    print(i)
+}
+
+print("Iterating over map:")
+let data = {"x": 10, "y": 20}
+for pair in data {
+    print(pair)
+}

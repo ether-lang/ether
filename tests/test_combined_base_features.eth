@@ -1,0 +1,32 @@
+fn process_data(data) {
+    let results = [1]
+    
+    for item in data {
+        if item > 0 {
+            results[0] = item * 2
+        }
+    }
+    
+    return results
+}
+
+let numbers = [1, 2, 3, 4, 5]
+let doubled = process_data(numbers)
+
+for n in 0..=3 {
+    print(n)
+}
+
+let scores = {
+    "alice": 95,
+    "bob": 87,
+    "charlie": 92
+}
+
+print(scores["alice"])
+
+try {
+    let x = scores["dave"]
+} catch (e) {
+    print("Key not found")
+}

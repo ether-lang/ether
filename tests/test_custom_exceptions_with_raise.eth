@@ -1,0 +1,26 @@
+fn validate_age(age) {
+    if age < 0 {
+        raise ValueError("Age cannot be negative")
+    }
+    if age > 150 {
+        raise ValueError("Age is unrealistic")
+    }
+    return age
+}
+
+try {
+    validate_age(25)
+    print("Age 25 is valid")
+    
+    validate_age(-5)
+} catch (e) {
+    print("Caught exception:")
+    print(e)
+}
+
+try {
+    validate_age(200)
+} catch (e) {
+    print("Another exception:")
+    print(e)
+}

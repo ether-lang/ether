@@ -1,0 +1,8 @@
+let weights = tensor([3, 3])
+print(weights)
+
+print(weights[0])
+print(weights[4])
+
+let activated = relu(weights)
+print(activated[2])
