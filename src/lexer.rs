@@ -38,7 +38,9 @@ pub enum TokenType {
   Plus,
   Minus,
   Star,
+  StarStar,
   Slash,
+  SlashSlash,
   Percent,
   Eq,
   Neq,
@@ -136,7 +138,7 @@ impl Lexer {
   }
 
   fn skip_comment(&mut self) {
-    if self.current() == Some('/') && self.peek(1) == Some('/') {
+    if self.current() == Some('#') {
       while self.current().is_some() && self.current() != Some('\n') {
         self.advance();
       }
@@ -277,11 +279,21 @@ impl Lexer {
         }
         '*' => {
           self.advance();
-          TokenType::Star
+          if self.current() == Some('*') {
+            self.advance();
+            TokenType::StarStar
+          } else {
+            TokenType::Star
+          }
         }
         '/' => {
           self.advance();
-          TokenType::Slash
+          if self.current() == Some('/') {
+            self.advance();
+            TokenType::SlashSlash
+          } else {
+            TokenType::Slash
+          }
         }
         '%' => {
           self.advance();

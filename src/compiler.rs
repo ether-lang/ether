@@ -18,6 +18,8 @@ pub enum OpCode {
   Mul,
   Div,
   Mod,
+  Pow,
+  Floor,
   Neg,
   Eq,
   Neq,
@@ -43,7 +45,7 @@ pub enum OpCode {
   Print,
   Pop,
   Halt,
-  Throw,
+  Raise,
   SetupTry,
   PopTry,
   BeginFinally,
@@ -434,7 +436,7 @@ impl Compiler {
       }
       Stmt::Throw { value } => {
         self.compile_expr(value)?;
-        self.emit(OpCode::Throw, 0);
+        self.emit(OpCode::Raise, 0);
       }
       Stmt::Raise {
         exception_type,
@@ -443,7 +445,7 @@ impl Compiler {
         self.compile_expr(message)?;
         let type_const = self.add_constant(Value::String(exception_type.clone()));
         self.emit(OpCode::LoadConst, type_const as i32);
-        self.emit(OpCode::Throw, 1); // arg=1 signals custom exception
+        self.emit(OpCode::Raise, 1); // arg=1 signals custom exception
       }
       Stmt::Expr(expr) => {
         self.compile_expr(expr)?;
@@ -487,6 +489,8 @@ impl Compiler {
           BinOp::Mul => OpCode::Mul,
           BinOp::Div => OpCode::Div,
           BinOp::Mod => OpCode::Mod,
+          BinOp::Pow => OpCode::Pow,
+          BinOp::Floor => OpCode::Floor,
           BinOp::Eq => OpCode::Eq,
           BinOp::Neq => OpCode::Neq,
           BinOp::Lt => OpCode::Lt,

@@ -162,6 +162,7 @@ impl VM {
           (Value::Float(x), Value::Float(y)) => Value::Float(x * y),
           (Value::Int(x), Value::Float(y)) => Value::Float(x as f64 * y),
           (Value::Float(x), Value::Int(y)) => Value::Float(x * y as f64),
+          (Value::String(x), Value::Int(y)) => Value::String(x.repeat(y as usize)),
           _ => return Err("Type error in multiplication".to_string()),
         };
         self.push(result);
@@ -174,7 +175,13 @@ impl VM {
             if y == 0 {
               return Err("Division by zero".to_string());
             }
-            Value::Int(x / y)
+
+            let res = x as f64 / y as f64;
+            if res.floor() == res {
+              Value::Int(res as i64)
+            } else {
+              Value::Float(res)
+            }
           }
           (Value::Float(x), Value::Float(y)) => Value::Float(x / y),
           (Value::Int(x), Value::Float(y)) => Value::Float(x as f64 / y),
@@ -191,6 +198,30 @@ impl VM {
         } else {
           return Err("Type error in modulo".to_string());
         }
+      }
+      OpCode::Pow => {
+        let b = self.pop()?;
+        let a = self.pop()?;
+        let result = match (a, b) {
+          (Value::Int(x), Value::Int(y)) => Value::Int(x.pow(y as u32)),
+          (Value::Float(x), Value::Float(y)) => Value::Float(x.powf(y)),
+          (Value::Int(x), Value::Float(y)) => Value::Float((x as f64).powf(y)),
+          (Value::Float(x), Value::Int(y)) => Value::Float(x.powf(y as f64)),
+          _ => return Err("Type error in power".to_string()),
+        };
+        self.push(result);
+      }
+      OpCode::Floor => {
+        let b = self.pop()?;
+        let a = self.pop()?;
+        let result = match (a, b) {
+          (Value::Int(x), Value::Int(y)) => Value::Int(x / y),
+          (Value::Float(x), Value::Float(y)) => Value::Int((x / y).floor() as i64),
+          (Value::Int(x), Value::Float(y)) => Value::Int(((x as f64) / y).floor() as i64),
+          (Value::Float(x), Value::Int(y)) => Value::Int((x / (y as f64)).floor() as i64),
+          _ => return Err("Type error in power".to_string()),
+        };
+        self.push(result);
       }
       OpCode::Neg => {
         let val = self.pop()?;
@@ -599,7 +630,7 @@ impl VM {
       OpCode::Halt => {
         self.pc = self.instructions.len();
       }
-      OpCode::Throw => {
+      OpCode::Raise => {
         if instr.arg == 1 {
           // Custom exception
           let exc_type = self.pop()?;

@@ -27,10 +27,10 @@ impl fmt::Display for Type {
       Type::Bool => write!(f, "bool"),
       Type::String => write!(f, "string"),
       Type::Void => write!(f, "void"),
-      Type::Tensor(None) => write!(f, "Tensor"),
+      Type::Tensor(None) => write!(f, "Tensor[]"),
       Type::Tensor(Some(shape)) => write!(f, "Tensor[{:?}]", shape),
-      Type::List(t) => write!(f, "[{}]", t),
-      Type::Map(k, v) => write!(f, "Map[{}, {}]", k, v),
+      Type::List(t) => write!(f, "List<{}>", t),
+      Type::Map(k, v) => write!(f, "Map<{}, {}>", k, v),
       Type::Range => write!(f, "Range"),
       Type::Function(params, ret) => {
         write!(f, "(")?;

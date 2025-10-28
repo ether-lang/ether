@@ -567,6 +567,8 @@ impl Parser {
       TokenType::Star => Some(BinOp::Mul),
       TokenType::Slash => Some(BinOp::Div),
       TokenType::Percent => Some(BinOp::Mod),
+      TokenType::StarStar => Some(BinOp::Pow),
+      TokenType::SlashSlash => Some(BinOp::Floor),
       _ => None,
     } {
       self.advance();
