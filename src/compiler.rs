@@ -182,7 +182,7 @@ pub struct Compiler {
   var_indices: HashMap<String, usize>,
   next_var_index: usize,
   function_addresses: HashMap<String, usize>,
-  is_repl: bool
+  is_repl: bool,
 }
 
 impl Compiler {

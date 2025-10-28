@@ -2,7 +2,11 @@
 // PARSER
 // ============================================================================
 
-use crate::{ast::{BinOp, Expr, MatchCase, Pattern, Stmt, UnOp}, lexer::{Token, TokenType}, types::Type};
+use crate::{
+  ast::{BinOp, Expr, MatchCase, Pattern, Stmt, UnOp},
+  lexer::{Token, TokenType},
+  types::Type,
+};
 
 pub struct Parser {
   tokens: Vec<Token>,
