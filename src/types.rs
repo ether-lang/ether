@@ -2,7 +2,7 @@
 // TYPE SYSTEM
 // ============================================================================
 
-use std::fmt;
+use core::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {

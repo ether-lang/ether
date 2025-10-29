@@ -11,7 +11,7 @@ Status
 
 Goals & Vision
 - Build a fast, expressive language primarily aimed at AI researchers and systems programmers.
-- Provide first-class tensor primitives and convenient high-level constructs (pattern matching, exceptions, ranges, concise syntax).
+- Provide first-class tensor primitives and convenient high-level constructs (pattern matching, errors, ranges, concise syntax).
 - Evolve into a modular toolchain: language spec -> compiler -> optimizer -> native backends.
 
 Key Features (implemented / in-progress)

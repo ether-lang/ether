@@ -2,181 +2,13 @@
 // COMPILER
 // ============================================================================
 
-use core::fmt;
 use std::collections::HashMap;
 
-use crate::ast::{BinOp, Expr, Pattern, Stmt, UnOp};
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(u8)]
-pub enum OpCode {
-  LoadConst,
-  LoadVar,
-  StoreVar,
-  Add,
-  Sub,
-  Mul,
-  Div,
-  Mod,
-  Pow,
-  Floor,
-  Neg,
-  Eq,
-  Neq,
-  Lt,
-  Gt,
-  Lte,
-  Gte,
-  And,
-  Or,
-  Not,
-  Jump,
-  JumpIfFalse,
-  Call,
-  Return,
-  TensorCreate,
-  MatMul,
-  Relu,
-  Sigmoid,
-  Tanh,
-  Softmax,
-  BuildList,
-  BuildMap,
-  Print,
-  Pop,
-  Halt,
-  Raise,
-  SetupTry,
-  PopTry,
-  BeginFinally,
-  EndFinally,
-  AssertType,
-  // New opcodes
-  Index,
-  IndexSet,
-  Slice,
-  BuildRange,
-  SetupForIn,
-  ForInNext,
-  PopForIn,
-  MatchBegin,
-  MatchCase,
-  MatchEnd,
-}
-
-#[derive(Debug, Clone)]
-pub struct Instruction {
-  pub opcode: OpCode,
-  pub arg: i32,
-}
-
-#[derive(Debug, Clone)]
-pub enum Value {
-  Int(i64),
-  Float(f64),
-  Bool(bool),
-  String(String),
-  List(Vec<Value>),
-  Map(HashMap<String, Value>),
-  Tensor {
-    shape: Vec<usize>,
-    data: Vec<f64>,
-  },
-  Range {
-    start: i64,
-    end: i64,
-    inclusive: bool,
-  },
-  Exception {
-    exc_type: String,
-    message: String,
-  },
-  Void,
-}
-
-impl Value {
-  pub fn type_name(&self) -> &str {
-    match self {
-      Value::Int(_) => "int",
-      Value::Float(_) => "float",
-      Value::Bool(_) => "bool",
-      Value::String(_) => "string",
-      Value::List(_) => "list",
-      Value::Map(_) => "map",
-      Value::Tensor { .. } => "Tensor",
-      Value::Range { .. } => "Range",
-      Value::Exception { .. } => "Exception",
-      Value::Void => "void",
-    }
-  }
-
-  pub fn to_key(&self) -> Option<String> {
-    match self {
-      Value::String(s) => Some(s.clone()),
-      Value::Int(n) => Some(n.to_string()),
-      _ => None,
-    }
-  }
-}
-
-impl fmt::Display for Value {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-      Value::Int(n) => write!(f, "{}", n),
-      Value::Float(n) => write!(f, "{}", n),
-      Value::Bool(b) => write!(f, "{}", b),
-      Value::String(s) => write!(f, "{}", s),
-      Value::List(v) => {
-        write!(f, "[")?;
-        for (i, val) in v.iter().enumerate() {
-          if i > 0 {
-            write!(f, ", ")?;
-          }
-          write!(f, "{}", val)?;
-        }
-        write!(f, "]")
-      }
-      Value::Map(m) => {
-        write!(f, "{{")?;
-        for (i, (k, v)) in m.iter().enumerate() {
-          if i > 0 {
-            write!(f, ", ")?;
-          }
-          write!(f, "{}: {}", k, v)?;
-        }
-        write!(f, "}}")
-      }
-      Value::Tensor { shape, data } => {
-        write!(f, "Tensor{:?}: [", shape)?;
-        for (i, val) in data.iter().take(5).enumerate() {
-          if i > 0 {
-            write!(f, ", ")?;
-          }
-          write!(f, "{:.4}", val)?;
-        }
-        if data.len() > 5 {
-          write!(f, ", ...")?;
-        }
-        write!(f, "]")
-      }
-      Value::Range {
-        start,
-        end,
-        inclusive,
-      } => {
-        if *inclusive {
-          write!(f, "{}..={}", start, end)
-        } else {
-          write!(f, "{}..{}", start, end)
-        }
-      }
-      Value::Exception { exc_type, message } => {
-        write!(f, "{}: {}", exc_type, message)
-      }
-      Value::Void => write!(f, "void"),
-    }
-  }
-}
+use crate::{
+  ast::{BinOp, Expr, Pattern, Stmt, UnOp},
+  instruction::{Instruction, OpCode},
+  value::Value,
+};
 
 pub struct Compiler {
   instructions: Vec<Instruction>,
@@ -300,7 +132,7 @@ impl Compiler {
           self.compile_stmt(stmt)?;
         }
 
-        let const_idx = self.add_constant(Value::Void);
+        let const_idx = self.add_constant(Value::Nil);
         self.emit(OpCode::LoadConst, const_idx as i32);
         self.emit(OpCode::Return, 0);
 
@@ -311,7 +143,7 @@ impl Compiler {
         if let Some(v) = value {
           self.compile_expr(v)?;
         } else {
-          let const_idx = self.add_constant(Value::Void);
+          let const_idx = self.add_constant(Value::Nil);
           self.emit(OpCode::LoadConst, const_idx as i32);
         }
         self.emit(OpCode::Return, 0);
@@ -439,13 +271,13 @@ impl Compiler {
         self.emit(OpCode::Raise, 0);
       }
       Stmt::Raise {
-        exception_type,
+        error_type,
         message,
       } => {
         self.compile_expr(message)?;
-        let type_const = self.add_constant(Value::String(exception_type.clone()));
+        let type_const = self.add_constant(Value::String(error_type.clone()));
         self.emit(OpCode::LoadConst, type_const as i32);
-        self.emit(OpCode::Raise, 1); // arg=1 signals custom exception
+        self.emit(OpCode::Raise, 1); // arg=1 signals custom error
       }
       Stmt::Expr(expr) => {
         self.compile_expr(expr)?;
@@ -516,8 +348,7 @@ impl Compiler {
             self.compile_expr(arg)?;
             self.emit(OpCode::Print, 0);
           }
-          let idx = self.add_constant(Value::Void);
-          self.emit(OpCode::LoadConst, idx as i32);
+          self.emit(OpCode::Nil, 0);
         }
         "matmul" | "relu" | "sigmoid" | "tanh" | "softmax" => {
           for arg in args {

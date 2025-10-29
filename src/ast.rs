@@ -53,7 +53,7 @@ pub enum Stmt {
     value: Box<Expr>,
   },
   Raise {
-    exception_type: String,
+    error_type: String,
     message: Box<Expr>,
   },
   Expr(Box<Expr>),

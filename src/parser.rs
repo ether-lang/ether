@@ -326,6 +326,10 @@ impl Parser {
       finally_block = Some(block);
     }
 
+    if catch_block.is_none() && finally_block.is_none() {
+      return Err("At least one of catch or finally block is expected for Try.".to_string());
+    }
+
     Ok(Stmt::Try {
       try_block,
       catch_var,
@@ -343,12 +347,12 @@ impl Parser {
   fn parse_raise(&mut self) -> Result<Stmt, String> {
     self.advance(); // consume 'raise'
 
-    let exception_type = if let TokenType::Ident(n) = &self.current().ttype {
+    let error_type = if let TokenType::Ident(n) = &self.current().ttype {
       let name = n.clone();
       self.advance();
       name
     } else {
-      return Err("Expected exception type after 'raise'".to_string());
+      return Err("Expected error type after 'raise'".to_string());
     };
 
     self.expect(|t| matches!(t, TokenType::LParen))?;
@@ -356,7 +360,7 @@ impl Parser {
     self.expect(|t| matches!(t, TokenType::RParen))?;
 
     Ok(Stmt::Raise {
-      exception_type,
+      error_type,
       message,
     })
   }

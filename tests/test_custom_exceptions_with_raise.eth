@@ -14,13 +14,13 @@ try {
     
     validate_age(-5)
 } catch (e) {
-    print("Caught exception:")
+    print("Caught error:")
     print(e)
 }
 
 try {
     validate_age(200)
 } catch (e) {
-    print("Another exception:")
+    print("Another error:")
     print(e)
 }

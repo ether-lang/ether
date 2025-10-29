@@ -4,9 +4,11 @@
 
 pub mod ast;
 pub mod compiler;
+pub mod instruction;
 pub mod lexer;
 pub mod parser;
 pub mod types;
+pub mod value;
 pub mod vm;
 
 pub struct Ether {

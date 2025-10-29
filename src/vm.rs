@@ -4,10 +4,14 @@
 
 use std::collections::HashMap;
 
-use crate::compiler::{Instruction, OpCode, Value};
+use crate::{
+  instruction::{Instruction, OpCode},
+  value::Value,
+};
 
 #[derive(Debug, Clone)]
 struct TryHandler {
+  call_site_pc: usize,
   catch_addr: usize,
   stack_size: usize,
 }
@@ -28,7 +32,7 @@ pub struct VM {
   call_stack: Vec<usize>,
   try_stack: Vec<TryHandler>,
   for_in_stack: Vec<ForInIterator>,
-  exception: Option<Value>,
+  error: Option<Value>,
 }
 
 impl VM {
@@ -37,18 +41,28 @@ impl VM {
       instructions,
       constants,
       stack: Vec::with_capacity(256),
-      variables: vec![Value::Void; 256],
+      variables: vec![Value::Nil; 256],
       pc: 0,
       call_stack: Vec::new(),
       try_stack: Vec::new(),
       for_in_stack: Vec::new(),
-      exception: None,
+      error: None,
     }
   }
 
   fn push(&mut self, value: Value) {
     self.stack.push(value);
   }
+
+  // fn peek(&mut self) -> Result<Value, String> {
+  //   let last = self.stack.last();
+
+  //   if let Some(last) = last {
+  //     Ok(last.clone())
+  //   } else {
+  //     Err("Stack underflow".to_string())
+  //   }
+  // }
 
   fn pop(&mut self) -> Result<Value, String> {
     self
@@ -64,33 +78,51 @@ impl VM {
     self.call_stack.clear();
     self.try_stack.clear();
     self.for_in_stack.clear();
-    self.exception = None;
+    self.error = None;
     self.pc = 0;
+  }
+
+  fn get_call_site_pc(&mut self) -> usize {
+    *self.call_stack.last().or(Some(&0)).unwrap()
+  }
+
+  fn pop_call_stack_to_try_site(&mut self) {
+    if self.try_stack.len() > 0 {
+      let try_call_site_pc = self.try_stack.last().unwrap().call_site_pc;
+      loop {
+        let call_site_pc = self.get_call_site_pc();
+        if call_site_pc != try_call_site_pc {
+          self.call_stack.pop();
+        } else {
+          break;
+        }
+      }
+    }
   }
 
   pub fn run(&mut self) -> Result<(), String> {
     while self.pc < self.instructions.len() {
       let instr = self.instructions[self.pc].clone();
 
-      // println!("INS: {:?}", instr.opcode);
+      // println!("{:#4} | {}", self.pc, instr);
 
-      if self.exception.is_some() {
-        self.handle_exception()?;
+      if self.error.is_some() {
+        self.handle_error()?;
         continue;
       }
 
       match self.execute(instr) {
         Ok(_) => self.pc += 1,
         Err(e) => {
-          self.exception = Some(Value::Exception {
+          self.error = Some(Value::Error {
             exc_type: "RuntimeError".to_string(),
             message: e,
           });
-          if !self.handle_exception()? {
-            if let Some(Value::Exception { exc_type, message }) = &self.exception {
+          if !self.handle_error()? {
+            if let Some(Value::Error { exc_type, message }) = &self.error {
               return Err(format!("Uncaught {}: {}", exc_type, message));
             }
-            return Err("Uncaught exception".to_string());
+            return Err("Uncaught error".to_string());
           }
         }
       }
@@ -98,13 +130,13 @@ impl VM {
     Ok(())
   }
 
-  fn handle_exception(&mut self) -> Result<bool, String> {
+  fn handle_error(&mut self) -> Result<bool, String> {
     if let Some(handler) = self.try_stack.pop() {
       while self.stack.len() > handler.stack_size {
         self.stack.pop();
       }
 
-      if let Some(exc) = self.exception.take() {
+      if let Some(exc) = self.error.take() {
         self.stack.push(exc);
       }
 
@@ -117,6 +149,9 @@ impl VM {
 
   fn execute(&mut self, instr: Instruction) -> Result<(), String> {
     match instr.opcode {
+      OpCode::Nil => {
+        self.push(Value::Nil);
+      }
       OpCode::LoadConst => {
         let val = self.constants[instr.arg as usize].clone();
         self.push(val);
@@ -631,8 +666,10 @@ impl VM {
         self.pc = self.instructions.len();
       }
       OpCode::Raise => {
+        self.pop_call_stack_to_try_site();
+
         if instr.arg == 1 {
-          // Custom exception
+          // Custom error
           let exc_type = self.pop()?;
           let message = self.pop()?;
           if let (Value::String(t), Value::String(m)) = (exc_type, message) {
@@ -642,7 +679,7 @@ impl VM {
           let val = self.pop()?;
           let msg = match val {
             Value::String(s) => s,
-            Value::Exception { message, .. } => message,
+            Value::Error { message, .. } => message,
             other => format!("{}", other),
           };
           return Err(msg);
@@ -650,7 +687,10 @@ impl VM {
       }
       OpCode::SetupTry => {
         let catch_addr = instr.arg as usize;
+        let call_site_pc = self.get_call_site_pc();
+
         self.try_stack.push(TryHandler {
+          call_site_pc,
           catch_addr,
           stack_size: self.stack.len(),
         });
