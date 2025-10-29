@@ -257,10 +257,16 @@ impl Lexer {
         break;
       }
 
+      let chr = self.current().unwrap();
+      if chr == '#' {
+        self.skip_comment();
+        continue;
+      }
+
       let line = self.line;
       let column = self.column;
 
-      let ttype = match self.current().unwrap() {
+      let ttype = match chr {
         ch if ch.is_ascii_digit() => self.read_number(),
         '"' => self.read_string(),
         ch if ch.is_alphabetic() || ch == '_' => self.read_identifier(),

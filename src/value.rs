@@ -3,7 +3,7 @@
 // ============================================================================
 
 use core::fmt;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -11,11 +11,11 @@ pub enum Value {
   Float(f64),
   Bool(bool),
   String(String),
-  List(Vec<Value>),
-  Map(HashMap<String, Value>),
+  List(Rc<RefCell<Vec<Value>>>),
+  Map(Rc<RefCell<HashMap<String, Value>>>),
   Tensor {
     shape: Vec<usize>,
-    data: Vec<f64>,
+    data: Rc<RefCell<Vec<f64>>>,
   },
   Range {
     start: i64,
@@ -64,8 +64,9 @@ impl fmt::Display for Value {
       Value::Bool(b) => write!(f, "{}", b),
       Value::String(s) => write!(f, "{}", s),
       Value::List(v) => {
+        let list = v.borrow();
         write!(f, "[")?;
-        for (i, val) in v.iter().enumerate() {
+        for (i, val) in list.iter().enumerate() {
           if i > 0 {
             write!(f, ", ")?;
           }
@@ -73,9 +74,10 @@ impl fmt::Display for Value {
         }
         write!(f, "]")
       }
-      Value::Map(m) => {
+      Value::Map(map_ref) => {
+        let map = map_ref.borrow();
         write!(f, "{{")?;
-        for (i, (k, v)) in m.iter().enumerate() {
+        for (i, (k, v)) in map.iter().enumerate() {
           if i > 0 {
             write!(f, ", ")?;
           }
@@ -84,17 +86,18 @@ impl fmt::Display for Value {
         write!(f, "}}")
       }
       Value::Tensor { shape, data } => {
-        write!(f, "Tensor[{:?}]->{{", shape)?;
-        for (i, val) in data.iter().take(5).enumerate() {
+        let data_vec = data.borrow();
+        write!(f, "Tensor{:?}: [", shape)?;
+        for (i, val) in data_vec.iter().take(5).enumerate() {
           if i > 0 {
             write!(f, ", ")?;
           }
           write!(f, "{:.4}", val)?;
         }
-        if data.len() > 5 {
+        if data_vec.len() > 5 {
           write!(f, ", ...")?;
         }
-        write!(f, "}}")
+        write!(f, "]")
       }
       Value::Range {
         start,

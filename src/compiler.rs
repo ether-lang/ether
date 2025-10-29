@@ -2,7 +2,7 @@
 // COMPILER
 // ============================================================================
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
   ast::{BinOp, Expr, Pattern, Stmt, UnOp},
@@ -413,9 +413,9 @@ impl Compiler {
         self.emit(OpCode::BuildMap, pairs.len() as i32);
       }
       Expr::TensorLit { shape } => {
-        let idx = self.add_constant(Value::List(
+        let idx = self.add_constant(Value::List(Rc::new(RefCell::new(
           shape.iter().map(|&s| Value::Int(s as i64)).collect(),
-        ));
+        ))));
         self.emit(OpCode::LoadConst, idx as i32);
         self.emit(OpCode::TensorCreate, 0);
       }

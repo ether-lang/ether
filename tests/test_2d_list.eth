@@ -1,0 +1,7 @@
+let x = [[1, 2], [3, 4]]
+let before = x[0][0]
+print(before)
+x[0][0] = 42
+let after = x[0][0]
+print(after)
+print(x)

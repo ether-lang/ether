@@ -9,3 +9,4 @@ print(person["age"])
 
 person["country"] = "Nigeria"
 print(person["country"])
+print(person)

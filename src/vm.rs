@@ -2,7 +2,7 @@
 // BYTECODE VM
 // ============================================================================
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
   instruction::{Instruction, OpCode},
@@ -384,7 +384,7 @@ impl VM {
           elements.push(self.pop()?);
         }
         elements.reverse();
-        self.push(Value::List(elements));
+        self.push(Value::List(Rc::new(RefCell::new(elements))));
       }
       OpCode::BuildMap => {
         let count = instr.arg as usize;
@@ -398,14 +398,15 @@ impl VM {
             return Err("Map keys must be strings or integers".to_string());
           }
         }
-        self.push(Value::Map(map));
+        self.push(Value::Map(Rc::new(RefCell::new(map))));
       }
       OpCode::Index => {
         let index = self.pop()?;
         let target = self.pop()?;
 
         match (target, index) {
-          (Value::List(list), Value::Int(i)) => {
+          (Value::List(list_ref), Value::Int(i)) => {
+            let list = list_ref.borrow();
             let idx = if i < 0 {
               (list.len() as i64 + i) as usize
             } else {
@@ -417,7 +418,8 @@ impl VM {
               return Err("List index out of bounds".to_string());
             }
           }
-          (Value::Map(map), key) => {
+          (Value::Map(map_ref), key) => {
+            let map = map_ref.borrow();
             if let Some(k) = key.to_key() {
               if let Some(val) = map.get(&k) {
                 self.push(val.clone());
@@ -429,13 +431,14 @@ impl VM {
             }
           }
           (Value::Tensor { shape: _, data }, Value::Int(i)) => {
+            let data_vec = data.borrow();
             let idx = if i < 0 {
-              (data.len() as i64 + i) as usize
+              (data_vec.len() as i64 + i) as usize
             } else {
               i as usize
             };
-            if idx < data.len() {
-              self.push(Value::Float(data[idx]));
+            if idx < data_vec.len() {
+              self.push(Value::Float(data_vec[idx]));
             } else {
               return Err("Tensor index out of bounds".to_string());
             }
@@ -449,7 +452,8 @@ impl VM {
         let target = self.pop()?;
 
         match (target, index, value) {
-          (Value::List(mut list), Value::Int(i), val) => {
+          (Value::List(list_ref), Value::Int(i), val) => {
+            let mut list = list_ref.borrow_mut(); // borrow_mut for mutation
             let idx = if i < 0 {
               (list.len() as i64 + i) as usize
             } else {
@@ -457,17 +461,46 @@ impl VM {
             };
             if idx < list.len() {
               list[idx] = val;
-              self.push(Value::List(list));
+              // Don't push anything - the list was modified in place
             } else {
               return Err("List index out of bounds".to_string());
             }
           }
-          (Value::Map(mut map), key, val) => {
+          (Value::Map(map_ref), key, val) => {
+            let mut map = map_ref.borrow_mut();
             if let Some(k) = key.to_key() {
               map.insert(k, val);
-              self.push(Value::Map(map));
+              // Modified in place, no need to push
             } else {
               return Err("Invalid map key".to_string());
+            }
+          }
+          (Value::Tensor { shape: _, data }, Value::Int(i), Value::Float(f)) => {
+            let mut data_vec = data.borrow_mut();
+            let idx = if i < 0 {
+              (data_vec.len() as i64 + i) as usize
+            } else {
+              i as usize
+            };
+            if idx < data_vec.len() {
+              data_vec[idx] = f;
+              // Modified in place
+            } else {
+              return Err("Tensor index out of bounds".to_string());
+            }
+          }
+          (Value::Tensor { shape: _, data }, Value::Int(i), Value::Int(n)) => {
+            let mut data_vec = data.borrow_mut();
+            let idx = if i < 0 {
+              (data_vec.len() as i64 + i) as usize
+            } else {
+              i as usize
+            };
+            if idx < data_vec.len() {
+              data_vec[idx] = n as f64;
+              // Modified in place
+            } else {
+              return Err("Tensor index out of bounds".to_string());
             }
           }
           _ => return Err("Invalid index assignment".to_string()),
@@ -479,7 +512,8 @@ impl VM {
         let target = self.pop()?;
 
         match (target, start, end) {
-          (Value::List(list), Value::Int(s), Value::Int(e)) => {
+          (Value::List(list_ref), Value::Int(s), Value::Int(e)) => {
+            let list = list_ref.borrow();
             let start_idx = if s < 0 {
               (list.len() as i64 + s).max(0) as usize
             } else {
@@ -493,9 +527,11 @@ impl VM {
             };
 
             if start_idx <= end_idx {
-              self.push(Value::List(list[start_idx..end_idx].to_vec()));
+              self.push(Value::List(Rc::new(RefCell::new(
+                list[start_idx..end_idx].to_vec(),
+              ))));
             } else {
-              self.push(Value::List(vec![]));
+              self.push(Value::List(Rc::new(RefCell::new(vec![]))));
             }
           }
           _ => return Err("Invalid slicing operation".to_string()),
@@ -522,7 +558,7 @@ impl VM {
         let var_idx = instr.arg as usize;
 
         let items = match iterable {
-          Value::List(list) => list,
+          Value::List(list_ref) => list_ref.borrow().clone(),
           Value::Range {
             start,
             end,
@@ -544,11 +580,22 @@ impl VM {
             }
             items
           }
-          Value::Tensor { data, .. } => data.iter().map(|&x| Value::Float(x)).collect(),
-          Value::Map(map) => map
-            .iter()
-            .map(|(k, v)| Value::List(vec![Value::String(k.clone()), v.clone()]))
-            .collect(),
+          Value::Tensor { data, .. } => {
+            let data_vec = data.borrow();
+            data_vec.iter().map(|&x| Value::Float(x)).collect()
+          }
+          Value::Map(map_ref) => {
+            let map = map_ref.borrow();
+            map
+              .iter()
+              .map(|(k, v)| {
+                Value::List(Rc::new(RefCell::new(vec![
+                  Value::String(k.clone()),
+                  v.clone(),
+                ])))
+              })
+              .collect()
+          }
           _ => return Err("Cannot iterate over this type".to_string()),
         };
 
@@ -576,7 +623,8 @@ impl VM {
       }
       OpCode::TensorCreate => {
         let shape_val = self.pop()?;
-        if let Value::List(shape_list) = shape_val {
+        if let Value::List(list_ref) = shape_val {
+          let shape_list = list_ref.borrow();
           let shape: Vec<usize> = shape_list
             .iter()
             .filter_map(|v| {
@@ -591,7 +639,10 @@ impl VM {
           let size: usize = shape.iter().product();
           let data: Vec<f64> = (0..size).map(|i| (i as f64) * 0.01).collect();
 
-          self.push(Value::Tensor { shape, data });
+          self.push(Value::Tensor {
+            shape,
+            data: Rc::new(RefCell::new(data)),
+          });
         } else {
           return Err("Invalid tensor shape".to_string());
         }
@@ -601,17 +652,18 @@ impl VM {
         let _a = self.pop()?;
         self.push(Value::Tensor {
           shape: vec![1, 1],
-          data: vec![1.0],
+          data: Rc::new(RefCell::new(vec![1.0])),
         });
       }
       OpCode::Relu => {
         let tensor = self.pop()?;
         if let Value::Tensor { shape, data } = tensor {
-          let new_data: Vec<f64> = data.iter().map(|&x| x.max(0.0)).collect();
-          self.push(Value::Tensor {
-            shape,
-            data: new_data,
-          });
+          let mut data_vec = data.borrow_mut();
+          for x in data_vec.iter_mut() {
+            *x = x.max(0.0);
+          }
+          drop(data_vec);
+          self.push(Value::Tensor { shape, data });
         } else {
           return Err("ReLU requires tensor".to_string());
         }
@@ -619,11 +671,12 @@ impl VM {
       OpCode::Sigmoid => {
         let tensor = self.pop()?;
         if let Value::Tensor { shape, data } = tensor {
-          let new_data: Vec<f64> = data.iter().map(|&x| 1.0 / (1.0 + (-x).exp())).collect();
-          self.push(Value::Tensor {
-            shape,
-            data: new_data,
-          });
+          let mut data_vec = data.borrow_mut();
+          for x in data_vec.iter_mut() {
+            *x = 1.0 / (1.0 + (-*x).exp());
+          }
+          drop(data_vec);
+          self.push(Value::Tensor { shape, data });
         } else {
           return Err("Sigmoid requires tensor".to_string());
         }
@@ -631,11 +684,12 @@ impl VM {
       OpCode::Tanh => {
         let tensor = self.pop()?;
         if let Value::Tensor { shape, data } = tensor {
-          let new_data: Vec<f64> = data.iter().map(|&x| x.tanh()).collect();
-          self.push(Value::Tensor {
-            shape,
-            data: new_data,
-          });
+          let mut data_vec = data.borrow_mut();
+          for x in data_vec.iter_mut() {
+            *x = x.tanh();
+          }
+          drop(data_vec);
+          self.push(Value::Tensor { shape, data });
         } else {
           return Err("Tanh requires tensor".to_string());
         }
@@ -643,14 +697,15 @@ impl VM {
       OpCode::Softmax => {
         let tensor = self.pop()?;
         if let Value::Tensor { shape, data } = tensor {
-          let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-          let exp_vals: Vec<f64> = data.iter().map(|&x| (x - max_val).exp()).collect();
+          let mut data_vec = data.borrow_mut();
+          let max_val = data_vec.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+          let exp_vals: Vec<f64> = data_vec.iter().map(|&x| (x - max_val).exp()).collect();
           let sum: f64 = exp_vals.iter().sum();
-          let new_data: Vec<f64> = exp_vals.iter().map(|&x| x / sum).collect();
-          self.push(Value::Tensor {
-            shape,
-            data: new_data,
-          });
+          for (i, x) in data_vec.iter_mut().enumerate() {
+            *x = exp_vals[i] / sum;
+          }
+          drop(data_vec);
+          self.push(Value::Tensor { shape, data });
         } else {
           return Err("Softmax requires tensor".to_string());
         }

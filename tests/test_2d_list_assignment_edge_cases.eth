@@ -1,0 +1,18 @@
+let x = [[1, 2], [3, 4]]
+let y = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+
+# Test basic nested assignment
+x[0][1] = 99
+print(x[0][1])  # Should print 99
+
+# Test assignment in deeper nesting
+y[1][0][1] = 77
+print(y[1][0][1])  # Should print 77
+
+# Test assignment with expression
+x[1][0] = x[0][1] + 1
+print(x[1][0])  # Should print 100
+
+# Test that original array is modified
+print(x[0][0])  # Should print 1 (unchanged)
+print(x[0][1])  # Should print 99 (modified)
