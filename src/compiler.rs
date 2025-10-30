@@ -7,7 +7,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
   ast::{BinOp, Expr, Pattern, Stmt, UnOp},
   instruction::{Instruction, OpCode},
-  value::Value,
+  value::{ClassDef, MethodDef, Value},
 };
 
 pub struct Compiler {
@@ -16,6 +16,8 @@ pub struct Compiler {
   var_indices: HashMap<String, usize>,
   next_var_index: usize,
   function_addresses: HashMap<String, usize>,
+  classes: HashMap<String, Rc<ClassDef>>,
+  current_class: Option<String>,
   is_repl: bool,
 }
 
@@ -27,6 +29,8 @@ impl Compiler {
       var_indices: HashMap::new(),
       next_var_index: 0,
       function_addresses: HashMap::new(),
+      classes: HashMap::new(),
+      current_class: None,
       is_repl: false,
     }
   }
@@ -38,6 +42,8 @@ impl Compiler {
       var_indices: HashMap::new(),
       next_var_index: 0,
       function_addresses: HashMap::new(),
+      classes: HashMap::new(),
+      current_class: None,
       is_repl: true,
     }
   }
@@ -94,9 +100,22 @@ impl Compiler {
         self.emit(OpCode::StoreVar, idx as i32);
       }
       Stmt::Assign { name, value } => {
+        // Check if it's a field assignment (self.field = value)
+        // This is handled through normal assignment for now
         self.compile_expr(value)?;
         let idx = self.get_var_index(name);
         self.emit(OpCode::StoreVar, idx as i32);
+      }
+      Stmt::FieldAssign {
+        object,
+        field,
+        value,
+      } => {
+        self.compile_expr(object)?;
+        let field_const = self.add_constant(Value::String(field.clone()));
+        self.emit(OpCode::LoadConst, field_const as i32);
+        self.compile_expr(value)?;
+        self.emit(OpCode::SetField, 0);
       }
       Stmt::IndexAssign {
         target,
@@ -278,6 +297,100 @@ impl Compiler {
         let type_const = self.add_constant(Value::String(error_type.clone()));
         self.emit(OpCode::LoadConst, type_const as i32);
         self.emit(OpCode::Raise, 1); // arg=1 signals custom error
+      }
+      Stmt::Class {
+        name,
+        parents,
+        methods,
+        fields,
+      } => {
+        let mut class_def = ClassDef::new(name.clone());
+
+        // Resolve parent classes
+        for parent_name in parents {
+          if let Some(parent_class) = self.classes.get(parent_name) {
+            class_def.parents.push(Rc::clone(parent_class));
+          } else {
+            return Err(format!("Parent class '{}' not found", parent_name));
+          }
+        }
+
+        // Add fields
+        for (field_name, default_expr, is_private) in fields {
+          let default_value = if let Some(expr) = default_expr {
+            // Compile and evaluate the default expression
+            // For simplicity, we'll just use Void for now
+            // You could extend this to evaluate constant expressions
+            None
+          } else {
+            None
+          };
+          class_def
+            .fields
+            .push((field_name.clone(), default_value, *is_private));
+        }
+
+        let old_class = self.current_class.clone();
+        self.current_class = Some(name.clone());
+
+        // Compile methods
+        for (method_name, params, body, return_type, is_static, is_private) in methods {
+          let jump_addr = self.current_address();
+          self.emit(OpCode::Jump, 0);
+
+          let method_addr = self.current_address();
+
+          // For instance methods, first parameter is implicitly 'self'
+          if !is_static {
+            let self_idx = self.get_var_index("self");
+            // self is already on the stack from the method call
+          }
+
+          // Store parameters
+          for (param_name, _) in params.iter().rev() {
+            let idx = self.get_var_index(param_name);
+            self.emit(OpCode::StoreVar, idx as i32);
+          }
+
+          // Compile method body
+          for stmt in body {
+            self.compile_stmt(stmt)?;
+          }
+
+          // Default return
+          let const_idx = self.add_constant(Value::Nil);
+          self.emit(OpCode::LoadConst, const_idx as i32);
+          self.emit(OpCode::Return, 0);
+
+          let end_addr = self.current_address();
+          self.instructions[jump_addr].arg = end_addr as i32;
+
+          let method_def = MethodDef {
+            name: method_name.clone(),
+            params: params.iter().map(|(n, _)| n.clone()).collect(),
+            address: method_addr,
+            is_private: *is_private,
+          };
+
+          if *is_static {
+            class_def
+              .static_methods
+              .insert(method_name.clone(), method_def);
+          } else {
+            class_def.methods.insert(method_name.clone(), method_def);
+          }
+        }
+
+        self.current_class = old_class;
+
+        let class_rc = Rc::new(class_def);
+        self.classes.insert(name.clone(), Rc::clone(&class_rc));
+
+        // Store class as a constant and bind to variable
+        let const_idx = self.add_constant(Value::Class(class_rc));
+        self.emit(OpCode::LoadConst, const_idx as i32);
+        let var_idx = self.get_var_index(name);
+        self.emit(OpCode::StoreVar, var_idx as i32);
       }
       Stmt::Expr(expr) => {
         self.compile_expr(expr)?;
@@ -484,6 +597,86 @@ impl Compiler {
         }
 
         self.emit(OpCode::MatchEnd, 0);
+      }
+      Expr::MemberAccess { object, member } => {
+        self.compile_expr(object)?;
+        let member_const = self.add_constant(Value::String(member.clone()));
+        self.emit(OpCode::LoadConst, member_const as i32);
+        self.emit(OpCode::GetField, 0);
+      }
+      Expr::New { class_name, args } => {
+        // Look up the class first and clone what we need
+        let class_info = if let Some(class_def) = self.classes.get(class_name) {
+          let class_rc = Rc::clone(class_def);
+          let has_init = class_def.find_method("__init__").map(|m| m.address);
+          Some((class_rc, has_init))
+        } else {
+          None
+        };
+
+        if let Some((class_def, init_addr)) = class_info {
+          // Push arguments
+          for arg in args {
+            self.compile_expr(arg)?;
+          }
+
+          // Push class
+          let const_idx = self.add_constant(Value::Class(class_def));
+          self.emit(OpCode::LoadConst, const_idx as i32);
+
+          self.emit(OpCode::NewInstance, args.len() as i32);
+
+          // Call __init__ if it exists
+          if let Some(addr) = init_addr {
+            self.emit(OpCode::Call, addr as i32);
+          }
+        } else {
+          return Err(format!("Class '{}' not found", class_name));
+        }
+      }
+      Expr::SelfExpr => {
+        let idx = self.get_var_index("self");
+        self.emit(OpCode::LoadVar, idx as i32);
+      }
+      Expr::MethodCall {
+        object,
+        method,
+        args,
+      } => {
+        // Compile object (this will be 'self' for the method)
+        self.compile_expr(object)?;
+
+        // Push arguments
+        for arg in args {
+          self.compile_expr(arg)?;
+        }
+
+        // Push method name
+        let method_const = self.add_constant(Value::String(method.clone()));
+        self.emit(OpCode::LoadConst, method_const as i32);
+
+        self.emit(OpCode::CallMethod, args.len() as i32);
+      }
+      Expr::SuperCall { method, args } => {
+        // Load self
+        let self_idx = self.get_var_index("self");
+        self.emit(OpCode::LoadVar, self_idx as i32);
+
+        // Push arguments
+        for arg in args {
+          self.compile_expr(arg)?;
+        }
+
+        // Push method name and current class name
+        let method_const = self.add_constant(Value::String(method.clone()));
+        self.emit(OpCode::LoadConst, method_const as i32);
+
+        if let Some(current_class) = &self.current_class {
+          let class_const = self.add_constant(Value::String(current_class.clone()));
+          self.emit(OpCode::LoadConst, class_const as i32);
+        }
+
+        self.emit(OpCode::CallSuper, args.len() as i32);
       }
     }
     Ok(())

@@ -59,6 +59,12 @@ pub enum OpCode {
   MatchBegin,
   MatchCase,
   MatchEnd,
+  NewInstance,
+  GetField,
+  SetField,
+  CallMethod,
+  LoadSelf,
+  CallSuper,
 }
 
 impl fmt::Display for OpCode {
@@ -116,6 +122,12 @@ impl fmt::Display for OpCode {
       OpCode::MatchBegin => write!(f, "match_begin"),
       OpCode::MatchCase => write!(f, "match_case"),
       OpCode::MatchEnd => write!(f, "match_end"),
+      OpCode::NewInstance => write!(f, "instance"),
+      OpCode::GetField => write!(f, "get_field"),
+      OpCode::SetField => write!(f, "set_field"),
+      OpCode::CallMethod => write!(f, "call_method"),
+      OpCode::LoadSelf => write!(f, "load_self"),
+      OpCode::CallSuper => write!(f, "call_super"),
     }
   }
 }

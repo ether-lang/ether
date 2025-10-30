@@ -68,6 +68,7 @@ impl Parser {
     match &self.current().ttype {
       TokenType::Let => self.parse_let(),
       TokenType::Fn => self.parse_function(),
+      TokenType::Class => self.parse_class(),
       TokenType::Return => self.parse_return(),
       TokenType::If => self.parse_if(),
       TokenType::While => self.parse_while(),
@@ -76,12 +77,15 @@ impl Parser {
       TokenType::Throw => self.parse_throw(),
       TokenType::Raise => self.parse_raise(),
       TokenType::Ident(_) => {
-        // Check for assignment or index assignment
-        // let start_pos = self.pos;
+        // Save position in case we need to backtrack
+        let start_pos = self.pos;
+
+        // Parse the full expression (including member access)
         let expr = self.parse_expression()?;
 
+        // Now check if this is an assignment
         if matches!(self.current().ttype, TokenType::Assign) {
-          self.advance();
+          self.advance(); // consume '='
           let value = Box::new(self.parse_expression()?);
 
           match expr {
@@ -89,6 +93,11 @@ impl Parser {
             Expr::Index { target, index } => Ok(Stmt::IndexAssign {
               target,
               index,
+              value,
+            }),
+            Expr::MemberAccess { object, member } => Ok(Stmt::FieldAssign {
+              object,
+              field: member,
               value,
             }),
             _ => Err("Invalid assignment target".to_string()),
@@ -365,6 +374,157 @@ impl Parser {
     })
   }
 
+  fn parse_class(&mut self) -> Result<Stmt, String> {
+    self.advance(); // consume 'class'
+
+    let name = if let TokenType::Ident(n) = &self.current().ttype {
+      let name = n.clone();
+      self.advance();
+      name
+    } else {
+      return Err("Expected class name".to_string());
+    };
+
+    let mut parents = Vec::new();
+    if matches!(self.current().ttype, TokenType::Extends) {
+      self.advance();
+
+      loop {
+        if let TokenType::Ident(parent) = &self.current().ttype {
+          parents.push(parent.clone());
+          self.advance();
+
+          if matches!(self.current().ttype, TokenType::Comma) {
+            self.advance();
+          } else {
+            break;
+          }
+        } else {
+          return Err("Expected parent class name".to_string());
+        }
+      }
+    }
+
+    self.expect(|t| matches!(t, TokenType::LBrace))?;
+
+    let mut methods = Vec::new();
+    let mut fields = Vec::new();
+
+    while !matches!(self.current().ttype, TokenType::RBrace) {
+      let is_static = if matches!(self.current().ttype, TokenType::Static) {
+        self.advance();
+        true
+      } else {
+        false
+      };
+
+      let is_private = if matches!(self.current().ttype, TokenType::Private) {
+        self.advance();
+        true
+      } else if matches!(self.current().ttype, TokenType::Public) {
+        self.advance();
+        false
+      } else {
+        false
+      };
+
+      if matches!(self.current().ttype, TokenType::Fn) {
+        self.advance();
+
+        let method_name = if let TokenType::Ident(n) = &self.current().ttype {
+          let name = n.clone();
+          self.advance();
+          name
+        } else {
+          return Err("Expected method name".to_string());
+        };
+
+        self.expect(|t| matches!(t, TokenType::LParen))?;
+
+        let mut params = Vec::new();
+        while !matches!(self.current().ttype, TokenType::RParen) {
+          let param_name = if let TokenType::Ident(n) = &self.current().ttype {
+            let name = n.clone();
+            self.advance();
+            name
+          } else {
+            return Err("Expected parameter name".to_string());
+          };
+
+          let param_type = if matches!(self.current().ttype, TokenType::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+          } else {
+            None
+          };
+
+          params.push((param_name, param_type));
+
+          if matches!(self.current().ttype, TokenType::Comma) {
+            self.advance();
+          }
+        }
+
+        self.expect(|t| matches!(t, TokenType::RParen))?;
+
+        let return_type = if matches!(self.current().ttype, TokenType::Arrow) {
+          self.advance();
+          Some(self.parse_type()?)
+        } else {
+          None
+        };
+
+        self.expect(|t| matches!(t, TokenType::LBrace))?;
+
+        let mut body = Vec::new();
+        while !matches!(self.current().ttype, TokenType::RBrace) {
+          body.push(self.parse_statement()?);
+        }
+
+        self.expect(|t| matches!(t, TokenType::RBrace))?;
+
+        methods.push((
+          method_name,
+          params,
+          body,
+          return_type,
+          is_static,
+          is_private,
+        ));
+      } else if matches!(self.current().ttype, TokenType::Let) {
+        self.advance();
+
+        let field_name = if let TokenType::Ident(n) = &self.current().ttype {
+          let name = n.clone();
+          self.advance();
+          name
+        } else {
+          return Err("Expected field name".to_string());
+        };
+
+        let default_value = if matches!(self.current().ttype, TokenType::Assign) {
+          self.advance();
+          Some(self.parse_expression()?)
+        } else {
+          None
+        };
+
+        fields.push((field_name, default_value, is_private));
+      } else {
+        return Err("Expected method or field declaration".to_string());
+      }
+    }
+
+    self.expect(|t| matches!(t, TokenType::RBrace))?;
+
+    Ok(Stmt::Class {
+      name,
+      parents,
+      methods,
+      fields,
+    })
+  }
+
   fn parse_expression(&mut self) -> Result<Expr, String> {
     self.parse_match()
   }
@@ -612,10 +772,44 @@ impl Parser {
 
     loop {
       match &self.current().ttype {
+        TokenType::Dot => {
+          self.advance();
+          if let TokenType::Ident(member) = &self.current().ttype {
+            let member_name = member.clone();
+            self.advance();
+
+            // Check if it's a method call
+            if matches!(self.current().ttype, TokenType::LParen) {
+              self.advance();
+              let mut args = Vec::new();
+
+              while !matches!(self.current().ttype, TokenType::RParen) {
+                args.push(self.parse_expression()?);
+                if matches!(self.current().ttype, TokenType::Comma) {
+                  self.advance();
+                }
+              }
+
+              self.expect(|t| matches!(t, TokenType::RParen))?;
+              expr = Expr::MethodCall {
+                object: Box::new(expr),
+                method: member_name,
+                args,
+              };
+            } else {
+              // It's a field/member access
+              expr = Expr::MemberAccess {
+                object: Box::new(expr),
+                member: member_name,
+              };
+            }
+          } else {
+            return Err("Expected member name after '.'".to_string());
+          }
+        }
         TokenType::LBracket => {
           self.advance();
 
-          // Check for slicing
           if matches!(self.current().ttype, TokenType::Colon) {
             self.advance();
             let end = if matches!(self.current().ttype, TokenType::RBracket) {
@@ -763,6 +957,59 @@ impl Parser {
         let expr = self.parse_expression()?;
         self.expect(|t| matches!(t, TokenType::RParen))?;
         Ok(expr)
+      }
+      TokenType::New => {
+        self.advance();
+
+        let class_name = if let TokenType::Ident(n) = &self.current().ttype {
+          let name = n.clone();
+          self.advance();
+          name
+        } else {
+          return Err("Expected class name after 'new'".to_string());
+        };
+
+        self.expect(|t| matches!(t, TokenType::LParen))?;
+
+        let mut args = Vec::new();
+        while !matches!(self.current().ttype, TokenType::RParen) {
+          args.push(self.parse_expression()?);
+          if matches!(self.current().ttype, TokenType::Comma) {
+            self.advance();
+          }
+        }
+
+        self.expect(|t| matches!(t, TokenType::RParen))?;
+        Ok(Expr::New { class_name, args })
+      }
+      TokenType::Self_ => {
+        self.advance();
+        Ok(Expr::SelfExpr)
+      }
+      TokenType::Super => {
+        self.advance();
+        self.expect(|t| matches!(t, TokenType::Dot))?;
+
+        let method = if let TokenType::Ident(n) = &self.current().ttype {
+          let name = n.clone();
+          self.advance();
+          name
+        } else {
+          return Err("Expected method name after 'super.'".to_string());
+        };
+
+        self.expect(|t| matches!(t, TokenType::LParen))?;
+
+        let mut args = Vec::new();
+        while !matches!(self.current().ttype, TokenType::RParen) {
+          args.push(self.parse_expression()?);
+          if matches!(self.current().ttype, TokenType::Comma) {
+            self.advance();
+          }
+        }
+
+        self.expect(|t| matches!(t, TokenType::RParen))?;
+        Ok(Expr::SuperCall { method, args })
       }
       _ => Err(format!(
         "Unexpected token at {}:{}",

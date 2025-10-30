@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
   instruction::{Instruction, OpCode},
-  value::Value,
+  value::{Instance, Value},
 };
 
 #[derive(Debug, Clone)]
@@ -781,6 +781,147 @@ impl VM {
         }
 
         self.push(value);
+      }
+      OpCode::NewInstance => {
+        let class_val = self.pop()?;
+        let arg_count = instr.arg as usize;
+
+        if let Value::Class(class_def) = class_val {
+          let instance = Instance::new(Rc::clone(&class_def));
+          let instance_val = Value::Instance(Rc::new(RefCell::new(instance)));
+
+          // Arguments are already on the stack for __init__
+          self.push(instance_val);
+        } else {
+          return Err("Expected class for instantiation".to_string());
+        }
+      }
+      OpCode::GetField => {
+        let field_name = self.pop()?;
+        let instance_val = self.pop()?;
+
+        if let (Value::Instance(instance_ref), Value::String(name)) = (instance_val, field_name) {
+          let instance = instance_ref.borrow();
+
+          // Check if it's a field
+          if let Some(value) = instance.get_field(&name) {
+            self.push(value.clone());
+          } else {
+            return Err(format!("Instance has no field '{}'", name));
+          }
+        } else {
+          return Err("Invalid field access".to_string());
+        }
+      }
+      OpCode::SetField => {
+        let value = self.pop()?;
+        let field_name = self.pop()?;
+        let object_val = self.pop()?;
+
+        if let (Value::Instance(instance_ref), Value::String(name)) = (object_val, field_name) {
+          let mut instance = instance_ref.borrow_mut();
+          instance.set_field(&name, value);
+        } else {
+          return Err("Invalid field assignment".to_string());
+        }
+      }
+      OpCode::CallMethod => {
+        let method_name = self.pop()?;
+        let arg_count = instr.arg as usize;
+
+        // Arguments are on the stack, then the object
+        let mut args = Vec::new();
+        for _ in 0..arg_count {
+          args.push(self.pop()?);
+        }
+        args.reverse();
+
+        let instance_val = self.pop()?;
+
+        if let (Value::Instance(instance_ref), Value::String(method)) =
+          (instance_val.clone(), method_name)
+        {
+          let instance = instance_ref.borrow();
+
+          if let Some(method_def) = instance.class.find_method(&method) {
+            if !instance.class.is_private_accessible(&method) {
+              return Err(format!("Method '{}' is private", method));
+            }
+
+            // Push 'self' first
+            self.push(instance_val);
+
+            // Push arguments
+            for arg in args {
+              self.push(arg);
+            }
+
+            // Call the method
+            self.call_stack.push(self.pc);
+            self.pc = method_def.address - 1;
+          } else {
+            return Err(format!("Method '{}' not found", method));
+          }
+        } else {
+          return Err("Invalid method call".to_string());
+        }
+      }
+      OpCode::CallSuper => {
+        let current_class_name = self.pop()?;
+        let method_name = self.pop()?;
+        let arg_count = instr.arg as usize;
+
+        let mut args = Vec::new();
+        for _ in 0..arg_count {
+          args.push(self.pop()?);
+        }
+        args.reverse();
+
+        let instance_val = self.pop()?;
+
+        if let (
+          Value::Instance(instance_ref),
+          Value::String(method),
+          Value::String(current_class),
+        ) = (instance_val.clone(), method_name, current_class_name)
+        {
+          let instance = instance_ref.borrow();
+
+          // Find the method in parent classes
+          let mut found_current = false;
+          let mut method_def = None;
+
+          for parent in &instance.class.parents {
+            if found_current {
+              if let Some(m) = parent.find_method(&method) {
+                method_def = Some(m.clone());
+                break;
+              }
+            }
+            if parent.name == current_class {
+              found_current = true;
+            }
+          }
+
+          if let Some(method) = method_def {
+            self.push(instance_val);
+            for arg in args {
+              self.push(arg);
+            }
+
+            self.call_stack.push(self.pc);
+            self.pc = method.address - 1;
+          } else {
+            return Err(format!("Super method '{}' not found", method));
+          }
+        } else {
+          return Err("Invalid super call".to_string());
+        }
+      }
+      OpCode::LoadSelf => {
+        let self_idx = instr.arg as usize;
+        let val = self.variables[self_idx].clone();
+        self.push(val);
       }
       OpCode::MatchBegin | OpCode::MatchCase | OpCode::MatchEnd => {
         // Pattern matching is handled inline during compilation

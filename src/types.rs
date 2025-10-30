@@ -17,6 +17,8 @@ pub enum Type {
   Range,
   Function(Vec<Type>, Box<Type>),
   TypeVar(String),
+  Class(String),
+  Instance(String),
 }
 
 impl fmt::Display for Type {
@@ -43,6 +45,8 @@ impl fmt::Display for Type {
         write!(f, ") -> {}", ret)
       }
       Type::TypeVar(name) => write!(f, "'{}", name),
+      Type::Class(name) => write!(f, "class {}", name),
+      Type::Instance(name) => write!(f, "{}", name),
     }
   }
 }

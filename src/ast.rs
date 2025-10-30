@@ -15,6 +15,11 @@ pub enum Stmt {
     name: String,
     value: Box<Expr>,
   },
+  FieldAssign {
+    object: Box<Expr>,
+    field: String,
+    value: Box<Expr>,
+  },
   IndexAssign {
     target: Box<Expr>,
     index: Box<Expr>,
@@ -57,6 +62,19 @@ pub enum Stmt {
     message: Box<Expr>,
   },
   Expr(Box<Expr>),
+  Class {
+    name: String,
+    parents: Vec<String>,
+    methods: Vec<(
+      String,
+      Vec<(String, Option<Type>)>,
+      Vec<Stmt>,
+      Option<Type>,
+      bool,
+      bool,
+    )>, // (name, params, body, return_type, is_static, is_private)
+    fields: Vec<(String, Option<Expr>, bool)>, // (name, default_value, is_private)
+  },
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +119,24 @@ pub enum Expr {
   Match {
     value: Box<Expr>,
     cases: Vec<MatchCase>,
+  },
+  MemberAccess {
+    object: Box<Expr>,
+    member: String,
+  },
+  New {
+    class_name: String,
+    args: Vec<Expr>,
+  },
+  SelfExpr,
+  SuperCall {
+    method: String,
+    args: Vec<Expr>,
+  },
+  MethodCall {
+    object: Box<Expr>,
+    method: String,
+    args: Vec<Expr>,
   },
 }
 

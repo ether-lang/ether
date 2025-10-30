@@ -6,6 +6,89 @@ use core::fmt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, Clone)]
+pub struct ClassDef {
+  pub name: String,
+  pub parents: Vec<Rc<ClassDef>>,
+  pub methods: HashMap<String, MethodDef>,
+  pub static_methods: HashMap<String, MethodDef>,
+  pub fields: Vec<(String, Option<Value>, bool)>, // (name, default, is_private)
+}
+
+#[derive(Debug, Clone)]
+pub struct MethodDef {
+  pub name: String,
+  pub params: Vec<String>,
+  pub address: usize,
+  pub is_private: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Instance {
+  pub class: Rc<ClassDef>,
+  pub fields: HashMap<String, Value>,
+}
+
+impl ClassDef {
+  pub fn new(name: String) -> Self {
+    ClassDef {
+      name,
+      parents: Vec::new(),
+      methods: HashMap::new(),
+      static_methods: HashMap::new(),
+      fields: Vec::new(),
+    }
+  }
+
+  pub fn find_method(&self, name: &str) -> Option<&MethodDef> {
+    // Check own methods first
+    if let Some(method) = self.methods.get(name) {
+      return Some(method);
+    }
+
+    // Check parent classes (C3 linearization for multiple inheritance)
+    for parent in &self.parents {
+      if let Some(method) = parent.find_method(name) {
+        return Some(method);
+      }
+    }
+
+    None
+  }
+
+  pub fn is_private_accessible(&self, method_name: &str) -> bool {
+    if let Some(method) = self.methods.get(method_name) {
+      !method.is_private
+    } else {
+      true
+    }
+  }
+}
+
+impl Instance {
+  pub fn new(class: Rc<ClassDef>) -> Self {
+    let mut fields = HashMap::new();
+
+    // Initialize fields with defaults
+    for (field_name, default_value, _) in &class.fields {
+      fields.insert(
+        field_name.clone(),
+        default_value.clone().unwrap_or(Value::Nil),
+      );
+    }
+
+    Instance { class, fields }
+  }
+
+  pub fn get_field(&self, name: &str) -> Option<&Value> {
+    self.fields.get(name)
+  }
+
+  pub fn set_field(&mut self, name: &str, value: Value) {
+    self.fields.insert(name.to_string(), value);
+  }
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
   Int(i64),
   Float(f64),
@@ -26,6 +109,8 @@ pub enum Value {
     exc_type: String,
     message: String,
   },
+  Class(Rc<ClassDef>),
+  Instance(Rc<RefCell<Instance>>),
   Nil,
 }
 
@@ -41,6 +126,8 @@ impl Value {
       Value::Tensor { .. } => "tensor",
       Value::Range { .. } => "range",
       Value::Error { .. } => "Error",
+      Value::Instance(_) => "object",
+      Value::Class(_) => "class",
       Value::Nil => "nil",
     }
   }
@@ -113,7 +200,9 @@ impl fmt::Display for Value {
       Value::Error { exc_type, message } => {
         write!(f, "{}: {}", exc_type, message)
       }
-      Value::Nil => write!(f, "void"),
+      Value::Class(class_def) => write!(f, "[class {}]", class_def.name),
+      Value::Instance(instance_ref) => write!(f, "[object {}]", instance_ref.borrow().class.name),
+      Value::Nil => write!(f, "nil"),
     }
   }
 }
