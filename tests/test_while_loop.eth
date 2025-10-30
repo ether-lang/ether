@@ -1,0 +1,54 @@
+# Test while loops
+
+let count = 0
+print("Counting to 5:")
+while count < 5 {
+    print(count)
+    count = count + 1
+}
+
+print("Countdown:")
+let n = 5
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+
+print("Nested while:")
+let i = 0
+while i < 3 {
+    let j = 0
+    while j < 2 {
+        print(i)
+        print(j)
+        j = j + 1
+    }
+    i = i + 1
+}
+
+# Expected output:
+# Counting to 5:
+# 0
+# 1
+# 2
+# 3
+# 4
+# Countdown:
+# 5
+# 4
+# 3
+# 2
+# 1
+# Nested while:
+# 0
+# 0
+# 0
+# 1
+# 1
+# 0
+# 1
+# 1
+# 2
+# 0
+# 2
+# 1

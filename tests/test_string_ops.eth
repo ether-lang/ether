@@ -1,0 +1,31 @@
+# Test string operations
+
+print("String concatenation:")
+let s1 = "Hello"
+let s2 = "World"
+let s3 = s1 + " " + s2
+print(s3)
+
+print("String in list:")
+let words = ["apple", "banana", "cherry"]
+print(words[0])
+print(words[1])
+
+print("String in map:")
+let translations = {
+    "hello": "hola",
+    "goodbye": "adios"
+}
+print(translations["hello"])
+
+print("ha" * 3)
+
+# Expected output:
+# String concatenation:
+# Hello World
+# String in list:
+# apple
+# banana
+# String in map:
+# hola
+# hahaha

@@ -1,0 +1,37 @@
+# Test complex nested expressions
+
+print("Arithmetic:")
+let result1 = (5 + 3) * 2 - 4 / 2
+print(result1)
+
+print("Boolean logic:")
+let result2 = (true and false) or (not false)
+print(result2)
+
+print("Comparison chains:")
+let x = 10
+let result3 = x > 5 and x < 15
+print(result3)
+
+print("Mixed operations:")
+let a = 5
+let b = 3
+let result4 = (a + b) * 2 == 16
+print(result4)
+
+print("Nested list/map operations:")
+let data = {"items": [1, 2, 3]}
+data["items"][1] = 99
+print(data["items"])
+
+# Expected output:
+# Arithmetic:
+# 14
+# Boolean logic:
+# true
+# Comparison chains:
+# true
+# Mixed operations:
+# true
+# Nested list/map operations:
+# [1, 99, 3]

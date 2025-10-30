@@ -1,0 +1,36 @@
+# Test tensor indexing and modification
+
+let t = tensor([3, 3])
+print("Original tensor:")
+print(t)
+
+print("Accessing elements:")
+print(t[0])
+print(t[4])
+print(t[8])
+
+print("Modifying elements:")
+t[0] = 1.5
+t[4] = 2.5
+t[8] = 3.5
+
+print("Modified tensor:")
+print(t)
+
+print("Negative indexing:")
+print(t[-1])
+print(t[-5])
+
+# Expected output:
+# Original tensor:
+# Tensor[3, 3]: [0.0000, 0.0100, 0.0200, 0.0300, 0.0400, ...]
+# Accessing elements:
+# 0.0
+# 0.04
+# 0.08
+# Modifying elements:
+# Modified tensor:
+# Tensor[3, 3]: [1.5000, 0.0100, 0.0200, 0.0300, 2.5000, ...]
+# Negative indexing:
+# 3.5
+# 2.5

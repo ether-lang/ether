@@ -1,0 +1,44 @@
+# Test edge cases
+
+print("Empty list:")
+let empty_list = []
+print(empty_list)
+
+print("Empty map:")
+let empty_map = {}
+print(empty_map)
+
+print("Division by small numbers:")
+let result1 = 10 / 3
+print(result1)
+
+print("Negative numbers:")
+let neg = -42
+print(neg)
+
+print("Zero comparisons:")
+print(0 == 0)
+print(0 < 1)
+print(0 > -1)
+
+print("Nil value:")
+let nothing = match 99 {
+    1 => "one"
+}
+print(nothing)
+
+# Expected output:
+# Empty list:
+# []
+# Empty map:
+# {}
+# Division by small numbers:
+# 3
+# Negative numbers:
+# -42
+# Zero comparisons:
+# true
+# true
+# true
+# Nil value:
+# nil

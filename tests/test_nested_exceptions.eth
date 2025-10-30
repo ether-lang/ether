@@ -1,0 +1,33 @@
+# Test nested try-catch blocks
+
+fn outer_function() {
+    try {
+        print("Outer try")
+        
+        try {
+            print("Inner try")
+            throw "Inner error"
+        } catch (e) {
+            print("Inner catch:")
+            print(e)
+            throw "Outer error"
+        }
+        
+    } catch (e) {
+        print("Outer catch:")
+        print(e)
+    }
+    
+    print("Function completed")
+}
+
+outer_function()
+
+# Expected output:
+# Outer try
+# Inner try
+# Inner catch:
+# RuntimeError: Inner error
+# Outer catch:
+# RuntimeError: Outer error
+# Function completed

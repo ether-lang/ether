@@ -1,0 +1,33 @@
+# Test iterating over maps
+
+let data = {
+    "x": 10,
+    "y": 20,
+    "z": 30
+}
+
+print("Iterating over map:")
+for pair in data {
+    print(pair)
+}
+
+let scores = {
+    "alice": 95,
+    "bob": 87,
+    "charlie": 92
+}
+
+print("Processing map entries:")
+for entry in scores {
+    print(entry)
+}
+
+# Expected output:
+# Iterating over map:
+# [x, 10]
+# [y, 20]
+# [z, 30]
+# Processing map entries:
+# [alice, 95]
+# [bob, 87]
+# [charlie, 92]

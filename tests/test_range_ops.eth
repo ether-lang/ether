@@ -1,0 +1,48 @@
+# Test range creation and iteration
+
+print("Exclusive range:")
+let r1 = 0..5
+print(r1)
+
+print("Inclusive range:")
+let r2 = 0..=5
+print(r2)
+
+print("Reverse range:")
+let r3 = 10..5
+print(r3)
+
+print("Iterating exclusive range:")
+for i in 1..4 {
+    print(i)
+}
+
+print("Iterating inclusive range:")
+for i in 1..=3 {
+    print(i)
+}
+
+print("Iterating reverse range:")
+for i in 5..2 {
+    print(i)
+}
+
+# Expected output:
+# Exclusive range:
+# 0..5
+# Inclusive range:
+# 0..=5
+# Reverse range:
+# 10..5
+# Iterating exclusive range:
+# 1
+# 2
+# 3
+# Iterating inclusive range:
+# 1
+# 2
+# 3
+# Iterating reverse range:
+# 5
+# 4
+# 3

@@ -1,0 +1,40 @@
+# Test exception handling with finally block
+
+fn test_finally() {
+    try {
+        print("In try block")
+        throw "Error occurred"
+    } catch (e) {
+        print("In catch block")
+        print(e)
+    } finally {
+        print("In finally block")
+    }
+    print("After try-catch-finally")
+}
+
+test_finally()
+
+print("---")
+
+fn test_finally_no_error() {
+    try {
+        print("Try block - no error")
+    } finally {
+        print("Finally always executes")
+    }
+    print("After try-finally")
+}
+
+test_finally_no_error()
+
+# Expected output:
+# In try block
+# In catch block
+# Error occurred
+# In finally block
+# After try-catch-finally
+# ---
+# Try block - no error
+# Finally always executes
+# After try-finally

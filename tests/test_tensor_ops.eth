@@ -1,0 +1,41 @@
+# Test tensor creation and operations
+
+print("Creating tensors:")
+let t1 = tensor([2, 3])
+print(t1)
+
+let t2 = tensor([3, 2])
+print(t2)
+
+print("ReLU activation:")
+let t3 = tensor([2, 2])
+let activated = relu(t3)
+print(activated)
+
+print("Sigmoid activation:")
+let t4 = tensor([2, 2])
+let sig = sigmoid(t4)
+print(sig)
+
+print("Tanh activation:")
+let t5 = tensor([2, 2])
+let tanh_result = tanh(t5)
+print(tanh_result)
+
+print("Softmax activation:")
+let t6 = tensor([3])
+let soft = softmax(t6)
+print(soft)
+
+# Expected output:
+# Creating tensors:
+# Tensor[2, 3]: [0.0000, 0.0100, 0.0200, 0.0300, 0.0400, ...]
+# Tensor[3, 2]: [0.0000, 0.0100, 0.0200, 0.0300, 0.0400, ...]
+# ReLU activation:
+# Tensor[2, 2]: [0.0000, 0.0100, 0.0200, 0.0300]
+# Sigmoid activation:
+# Tensor[2, 2]: [0.5000, 0.5025, 0.5050, 0.5075]
+# Tanh activation:
+# Tensor[2, 2]: [0.0000, 0.0100, 0.0200, 0.0300]
+# Softmax activation:
+# Tensor[3]: [0.3300, 0.3333, 0.3367]

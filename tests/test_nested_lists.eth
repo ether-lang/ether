@@ -1,0 +1,43 @@
+# Test nested list operations
+
+print("Creating nested list:")
+let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+print(matrix)
+
+print("Accessing nested elements:")
+print(matrix[0])
+print(matrix[1])
+print(matrix[2])
+
+print("Accessing deep elements:")
+print(matrix[0][0])
+print(matrix[1][1])
+print(matrix[2][2])
+
+print("Modifying nested elements:")
+matrix[1][1] = 99
+print(matrix[1])
+
+print("Nested list with mixed types:")
+let mixed = [1, [2, 3], "text", [4, [5, 6]]]
+print(mixed)
+print(mixed[1])
+print(mixed[3])
+
+# Expected output:
+# Creating nested list:
+# [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+# Accessing nested elements:
+# [1, 2, 3]
+# [4, 5, 6]
+# [7, 8, 9]
+# Accessing deep elements:
+# 1
+# 5
+# 9
+# Modifying nested elements:
+# [4, 99, 6]
+# Nested list with mixed types:
+# [1, [2, 3], text, [4, [5, 6]]]
+# [2, 3]
+# [4, [5, 6]]

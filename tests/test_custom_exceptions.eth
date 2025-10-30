@@ -1,0 +1,49 @@
+# Test custom exception types with raise
+
+fn validate_positive(n) {
+    if n < 0 {
+        raise ValueError("Number must be positive")
+    }
+    return n
+}
+
+fn divide_safe(a, b) {
+    if b == 0 {
+        raise DivisionError("Cannot divide by zero")
+    }
+    return a / b
+}
+
+print("Testing custom exceptions:")
+
+try {
+    let result = validate_positive(10)
+    print(result)
+} catch (e) {
+    print("Caught:")
+    print(e)
+}
+
+try {
+    let result = validate_positive(-5)
+    print(result)
+} catch (e) {
+    print("Caught:")
+    print(e)
+}
+
+try {
+    let result = divide_safe(10, 0)
+    print(result)
+} catch (e) {
+    print("Caught:")
+    print(e)
+}
+
+# Expected output:
+# Testing custom exceptions:
+# 10
+# Caught:
+# ValueError: Number must be positive
+# Caught:
+# DivisionError: Cannot divide by zero
