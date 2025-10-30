@@ -11,7 +11,7 @@ FIX:
 - test_recursion.eth
 
 
-A few test cases failed with the wrong ouputs:
+A test case failed with the wrong ouputs:
 
 1. test_recursion.eth
 
