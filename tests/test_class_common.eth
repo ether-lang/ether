@@ -1,0 +1,35 @@
+class Animal {
+    let name
+    
+    fn new(n) {
+        self.name = n
+    }
+    
+    fn speak() {
+        print("Animal speaks")
+    }
+}
+
+class Dog extends Animal {
+    fn speak() {
+        print("Woof!")
+    }
+}
+
+class Cat extends Animal {
+    fn speak() {
+        print("Meow!")
+    }
+}
+
+# Multiple inheritance
+class DogCat extends Dog, Cat {
+    fn speak() {
+        super.speak()  # Calls Dog's speak (first parent)
+        print("Confused animal sound")
+    }
+}
+
+let pet = new Dog("Buddy")
+pet.speak()  # Prints "Woof!"
+print(pet.name)  # Prints "Buddy"

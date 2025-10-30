@@ -1,0 +1,34 @@
+# Test class using lists and maps
+class Student {
+    let name
+    let grades
+    let info
+    
+    fn new(n) {
+        self.name = n
+        self.grades = [1]
+        self.info = {}
+    }
+    
+    fn add_grade(grade) {
+        self.grades[0] = grade
+    }
+    
+    fn set_info(key, value) {
+        self.info[key] = value
+    }
+    
+    fn display() {
+        print("Student:")
+        print(self.name)
+        print("Grades:")
+        print(self.grades)
+        print("Info:")
+        print(self.info)
+    }
+}
+
+let student = new Student("Bob")
+student.add_grade(95)
+student.set_info("email", "bob@example.com")
+student.display()

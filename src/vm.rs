@@ -371,8 +371,11 @@ impl VM {
         self.pc = instr.arg as usize - 1;
       }
       OpCode::Return => {
+        let return_val = self.pop().unwrap_or(Value::Nil);
+
         if let Some(return_addr) = self.call_stack.pop() {
           self.pc = return_addr;
+          self.push(return_val);
         } else {
           self.pc = self.instructions.len();
         }
@@ -717,6 +720,13 @@ impl VM {
       OpCode::Pop => {
         self.pop()?;
       }
+      OpCode::Dup => {
+        if let Some(top) = self.stack.last() {
+          self.push(top.clone());
+        } else {
+          return Err("Cannot duplicate: stack is empty".to_string());
+        }
+      }
       OpCode::Halt => {
         self.pc = self.instructions.len();
       }
@@ -790,7 +800,7 @@ impl VM {
           let instance = Instance::new(Rc::clone(&class_def));
           let instance_val = Value::Instance(Rc::new(RefCell::new(instance)));
 
-          // Arguments are already on the stack for __init__
+          // Arguments are already on the stack for constructor
           self.push(instance_val);
         } else {
           return Err("Expected class for instantiation".to_string());
@@ -818,52 +828,105 @@ impl VM {
         let field_name = self.pop()?;
         let object_val = self.pop()?;
 
-        if let (Value::Instance(instance_ref), Value::String(name)) = (object_val, field_name) {
-          let mut instance = instance_ref.borrow_mut();
-          instance.set_field(&name, value);
+        // println!(
+        //   "DEBUG SetField: object_val type = {}, field_name = {:?}, value = {:?}",
+        //   object_val.type_name(),
+        //   field_name,
+        //   value
+        // );
+
+        if let Value::Instance(instance_ref) = object_val {
+          if let Value::String(name) = field_name {
+            let mut instance = instance_ref.borrow_mut();
+            instance.set_field(&name, value);
+            // println!("DEBUG: Successfully set field '{}' on instance", name);
+          } else {
+            return Err(format!(
+              "Field name must be a name, got {}",
+              field_name.type_name()
+            ));
+          }
         } else {
-          return Err("Invalid field assignment".to_string());
+          return Err(format!(
+            "Invalid field assignment - expected instance, got {}",
+            object_val.type_name()
+          ));
         }
       }
       OpCode::CallMethod => {
         let method_name = self.pop()?;
         let arg_count = instr.arg as usize;
 
-        // Arguments are on the stack, then the object
+        // Pop arguments
         let mut args = Vec::new();
         for _ in 0..arg_count {
           args.push(self.pop()?);
         }
         args.reverse();
 
-        let instance_val = self.pop()?;
+        let target_val = self.pop()?;
 
-        if let (Value::Instance(instance_ref), Value::String(method)) =
-          (instance_val.clone(), method_name.clone())
-        {
-          let instance = instance_ref.borrow();
+        // Check if it's a class (static method) or instance (instance method)
+        match target_val {
+          Value::Instance(instance_ref) => {
+            if let Value::String(method) = method_name {
+              let method_addr = {
+                let instance = instance_ref.borrow();
 
-          if let Some(method_def) = instance.class.find_method(&method) {
-            if !instance.class.is_private_accessible(&method) {
-              return Err(format!("Method '{}' is private", method));
+                if let Some(method_def) = instance.class.find_method(&method) {
+                  Some(method_def.address)
+                } else {
+                  None
+                }
+              };
+
+              if let Some(addr) = method_addr {
+                // Push instance as self
+                self.push(Value::Instance(instance_ref));
+
+                // Push arguments
+                for arg in args {
+                  self.push(arg);
+                }
+
+                // Call the method
+                self.call_stack.push(self.pc);
+                self.pc = addr - 1;
+              } else {
+                return Err(format!("Method '{}' not found", method));
+              }
+            } else {
+              return Err("Method name must be a string".to_string());
             }
-
-            // Push 'self' first
-            self.push(instance_val);
-
-            // Push arguments
-            for arg in args {
-              self.push(arg);
-            }
-
-            // Call the method
-            self.call_stack.push(self.pc);
-            self.pc = method_def.address - 1;
-          } else {
-            return Err(format!("Method '{}' not found", method));
           }
-        } else {
-          return Err("Invalid method call".to_string());
+          Value::Class(class_def) => {
+            // Static method call
+            if let Value::String(method) = method_name {
+              if let Some(static_method) = class_def.static_methods.get(&method) {
+                // Push arguments (no self for static methods)
+                for arg in args {
+                  self.push(arg);
+                }
+
+                // Call the static method
+                self.call_stack.push(self.pc);
+                self.pc = static_method.address - 1;
+              } else {
+                return Err(format!(
+                  "Static method '{}' not found on class '{}'",
+                  method, class_def.name
+                ));
+              }
+            } else {
+              return Err("Method name must be a string".to_string());
+            }
+          }
+          _ => {
+            return Err(format!(
+              "Invalid method call - expected instance or class, got {}",
+              target_val.type_name()
+            ));
+          }
         }
       }
       OpCode::CallSuper => {
@@ -879,40 +942,44 @@ impl VM {
 
         let instance_val = self.pop()?;
 
-        if let (
-          Value::Instance(instance_ref),
-          Value::String(method),
-          Value::String(current_class),
-        ) = (instance_val.clone(), method_name, current_class_name)
-        {
-          let instance = instance_ref.borrow();
+        if let Value::Instance(instance_ref) = &instance_val {
+          if let Value::String(method) = &method_name {
+            if let Value::String(_current_class) = current_class_name {
+              // Find the method in parent classes
+              let method_addr = {
+                let instance = instance_ref.borrow();
 
-          // Find the method in parent classes
-          let mut found_current = false;
-          let mut method_def = None;
+                // Search through parents in order
+                let mut addr = None;
+                for parent in &instance.class.parents {
+                  if let Some(m) = parent.find_method(method) {
+                    addr = Some(m.address);
+                    break; // Use first match (C3 linearization)
+                  }
+                }
 
-          for parent in &instance.class.parents {
-            if found_current {
-              if let Some(m) = parent.find_method(&method) {
-                method_def = Some(m.clone());
-                break;
+                addr
+              };
+
+              if let Some(addr) = method_addr {
+                self.push(instance_val);
+                for arg in args {
+                  self.push(arg);
+                }
+
+                self.call_stack.push(self.pc);
+                self.pc = addr - 1;
+              } else {
+                return Err(format!(
+                  "Super method '{}' not found in any parent class",
+                  method
+                ));
               }
+            } else {
+              return Err("Invalid super call".to_string());
             }
-            if parent.name == current_class {
-              found_current = true;
-            }
-          }
-
-          if let Some(method) = method_def {
-            self.push(instance_val);
-            for arg in args {
-              self.push(arg);
-            }
-
-            self.call_stack.push(self.pc);
-            self.pc = method.address - 1;
           } else {
-            return Err(format!("Super method '{}' not found", method));
+            return Err("Invalid super call".to_string());
           }
         } else {
           return Err("Invalid super call".to_string());

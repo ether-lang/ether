@@ -1,35 +1,40 @@
+# Test single inheritance
 class Animal {
     let name
     
-    fn __init__(n) {
+    fn new(n) {
         self.name = n
     }
     
     fn speak() {
         print("Animal speaks")
     }
+    
+    fn introduce() {
+        print("I am")
+        print(self.name)
+    }
 }
 
 class Dog extends Animal {
+    let breed
+    
+    fn new(n, b) {
+        super(n)
+        self.breed = b
+    }
+    
     fn speak() {
         print("Woof!")
     }
-}
-
-class Cat extends Animal {
-    fn speak() {
-        print("Meow!")
+    
+    fn show_breed() {
+        print("Breed:")
+        print(self.breed)
     }
 }
 
-# Multiple inheritance
-class DogCat extends Dog, Cat {
-    fn speak() {
-        super.speak()  # Calls Dog's speak (first parent)
-        print("Confused animal sound")
-    }
-}
-
-let pet = new Dog("Buddy")
-pet.speak()  # Prints "Woof!"
-print(pet.name)  # Prints "Buddy"
+let dog = new Dog("Buddy", "Golden Retriever")
+dog.introduce()
+dog.speak()
+dog.show_breed()

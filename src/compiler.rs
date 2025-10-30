@@ -111,10 +111,10 @@ impl Compiler {
         field,
         value,
       } => {
-        self.compile_expr(object)?;
+        self.compile_expr(object)?; // Push object (e.g., self)
         let field_const = self.add_constant(Value::String(field.clone()));
-        self.emit(OpCode::LoadConst, field_const as i32);
-        self.compile_expr(value)?;
+        self.emit(OpCode::LoadConst, field_const as i32); // Push field name
+        self.compile_expr(value)?; // Push value
         self.emit(OpCode::SetField, 0);
       }
       Stmt::IndexAssign {
@@ -340,17 +340,16 @@ impl Compiler {
 
           let method_addr = self.current_address();
 
-          // For instance methods, first parameter is implicitly 'self'
-          if !is_static {
-            let self_idx = self.get_var_index("self");
-            // Store self from the stack to its variable location
-            self.emit(OpCode::StoreVar, self_idx as i32);
-          }
-
-          // Store parameters
+          // Store parameters in REVERSE order (top to bottom)
           for (param_name, _) in params.iter().rev() {
             let idx = self.get_var_index(param_name);
             self.emit(OpCode::StoreVar, idx as i32);
+          }
+
+          // Store self LAST (it's at the bottom of the stack)
+          if !is_static {
+            let self_idx = self.get_var_index("self");
+            self.emit(OpCode::StoreVar, self_idx as i32);
           }
 
           // Compile method body
@@ -606,30 +605,40 @@ impl Compiler {
         self.emit(OpCode::GetField, 0);
       }
       Expr::New { class_name, args } => {
-        // Look up the class first and clone what we need
         let class_info = if let Some(class_def) = self.classes.get(class_name) {
           let class_rc = Rc::clone(class_def);
-          let has_init = class_def.find_method("__init__").map(|m| m.address);
-          Some((class_rc, has_init))
+          let init_addr = class_def.find_method("new").map(|m| m.address);
+          Some((class_rc, init_addr))
         } else {
           None
         };
 
         if let Some((class_def, init_addr)) = class_info {
-          // Push arguments
-          for arg in args {
-            self.compile_expr(arg)?;
-          }
-
           // Push class
           let const_idx = self.add_constant(Value::Class(class_def));
           self.emit(OpCode::LoadConst, const_idx as i32);
 
-          self.emit(OpCode::NewInstance, args.len() as i32);
+          // Create instance (leaves instance on stack)
+          self.emit(OpCode::NewInstance, 0);
 
-          // Call __init__ if it exists
+          // If constructor exists
           if let Some(addr) = init_addr {
+            // Duplicate the instance (we need it twice: once for init, once for result)
+            // Add a Dup opcode
+            self.emit(OpCode::Dup, 0);
+
+            // Push arguments
+            for arg in args {
+              self.compile_expr(arg)?;
+            }
+
+            // Call constructor (this consumes the duplicated instance)
             self.emit(OpCode::Call, addr as i32);
+
+            // Pop constructor's return value
+            self.emit(OpCode::Pop, 0);
+
+            // Original instance is still on stack
           }
         } else {
           return Err(format!("Class '{}' not found", class_name));

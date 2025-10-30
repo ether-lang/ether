@@ -1,0 +1,32 @@
+# Test inheritance chain
+class Animal {
+    let name
+    
+    fn new(n) {
+        self.name = n
+    }
+    
+    fn eat() {
+        print(self.name)
+        print("is eating")
+    }
+}
+
+class Mammal extends Animal {
+    fn feed_young() {
+        print(self.name)
+        print("feeds its young")
+    }
+}
+
+class Dog extends Mammal {
+    fn bark() {
+        print(self.name)
+        print("says: Woof!")
+    }
+}
+
+let dog = new Dog("Buddy")
+dog.eat()
+dog.feed_young()
+dog.bark()

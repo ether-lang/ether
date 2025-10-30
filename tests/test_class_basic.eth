@@ -1,0 +1,24 @@
+# Test basic class definition and instantiation
+class Animal {
+    let name
+    let age
+    
+    fn new(n, a) {
+        self.name = n
+        self.age = a
+    }
+    
+    fn speak() {
+        print("My name is")
+        print(self.name)
+        print("I am")
+        print(self.age)
+        print("years old")
+    }
+}
+
+let dog = new Animal("Buddy", 5)
+dog.speak()
+
+let cat = new Animal("Whiskers", 3)
+cat.speak()

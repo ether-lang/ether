@@ -1,0 +1,36 @@
+# Test private methods
+class BankAccount {
+    let balance
+    
+    fn new(initial) {
+        self.balance = initial
+    }
+    
+    private fn _validate(amount) {
+        if amount > 0 {
+            return true
+        } else {
+            return false
+        }
+    }
+    
+    fn deposit(amount) {
+        if self._validate(amount) {
+            self.balance = self.balance + amount
+            print("Deposited:")
+            print(amount)
+        }
+    }
+    
+    fn get_balance() {
+        print("Balance:")
+        print(self.balance)
+    }
+}
+
+let account = new BankAccount(100)
+account.deposit(50)
+account.get_balance()
+
+# This should fail if called externally:
+# account._validate(10)

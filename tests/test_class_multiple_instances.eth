@@ -1,0 +1,32 @@
+# Test that multiple instances have independent state
+class Counter {
+    let count
+    
+    fn new() {
+        self.count = 0
+    }
+    
+    fn increment() {
+        self.count = self.count + 1
+    }
+    
+    fn get_count() {
+        print("Count:")
+        print(self.count)
+    }
+}
+
+let c1 = new Counter()
+let c2 = new Counter()
+
+c1.increment()
+c1.increment()
+c1.increment()
+
+c2.increment()
+
+print("Counter 1:")
+c1.get_count()
+
+print("Counter 2:")
+c2.get_count()

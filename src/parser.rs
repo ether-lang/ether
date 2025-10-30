@@ -431,12 +431,17 @@ impl Parser {
       if matches!(self.current().ttype, TokenType::Fn) {
         self.advance();
 
-        let method_name = if let TokenType::Ident(n) = &self.current().ttype {
-          let name = n.clone();
-          self.advance();
-          name
-        } else {
-          return Err("Expected method name".to_string());
+        let method_name = match &self.current().ttype {
+          TokenType::Ident(n) => {
+            let name = n.clone();
+            self.advance();
+            name
+          }
+          TokenType::New => {
+            self.advance();
+            "new".to_string() // Treat 'new' keyword as the identifier "new"
+          }
+          _ => return Err("Expected method name or constructor".to_string()),
         };
 
         self.expect(|t| matches!(t, TokenType::LParen))?;
@@ -988,28 +993,58 @@ impl Parser {
       }
       TokenType::Super => {
         self.advance();
-        self.expect(|t| matches!(t, TokenType::Dot))?;
 
-        let method = if let TokenType::Ident(n) = &self.current().ttype {
-          let name = n.clone();
+        // Check if it's super(args) or super.method(args)
+        if matches!(self.current().ttype, TokenType::LParen) {
+          // super(args) - automatically calls super.new(args)
           self.advance();
-          name
-        } else {
-          return Err("Expected method name after 'super.'".to_string());
-        };
 
-        self.expect(|t| matches!(t, TokenType::LParen))?;
-
-        let mut args = Vec::new();
-        while !matches!(self.current().ttype, TokenType::RParen) {
-          args.push(self.parse_expression()?);
-          if matches!(self.current().ttype, TokenType::Comma) {
-            self.advance();
+          let mut args = Vec::new();
+          while !matches!(self.current().ttype, TokenType::RParen) {
+            args.push(self.parse_expression()?);
+            if matches!(self.current().ttype, TokenType::Comma) {
+              self.advance();
+            }
           }
-        }
 
-        self.expect(|t| matches!(t, TokenType::RParen))?;
-        Ok(Expr::SuperCall { method, args })
+          self.expect(|t| matches!(t, TokenType::RParen))?;
+          Ok(Expr::SuperCall {
+            method: "new".to_string(),
+            args,
+          })
+        } else if matches!(self.current().ttype, TokenType::Dot) {
+          // super.method(args)
+          self.advance();
+
+          let method = match &self.current().ttype {
+            TokenType::Ident(n) => {
+              let name = n.clone();
+              self.advance();
+              name
+            }
+            TokenType::New => {
+              // Allow super.new explicitly
+              self.advance();
+              "new".to_string()
+            }
+            _ => return Err("Expected method name after 'super.'".to_string()),
+          };
+
+          self.expect(|t| matches!(t, TokenType::LParen))?;
+
+          let mut args = Vec::new();
+          while !matches!(self.current().ttype, TokenType::RParen) {
+            args.push(self.parse_expression()?);
+            if matches!(self.current().ttype, TokenType::Comma) {
+              self.advance();
+            }
+          }
+
+          self.expect(|t| matches!(t, TokenType::RParen))?;
+          Ok(Expr::SuperCall { method, args })
+        } else {
+          return Err("Expected '(' or '.' after 'super'".to_string());
+        }
       }
       _ => Err(format!(
         "Unexpected token at {}:{}",

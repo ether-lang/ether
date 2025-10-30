@@ -1,0 +1,33 @@
+# Test returning self for potential method chaining
+class Builder {
+    let x
+    let y
+    
+    fn new() {
+        self.x = 0
+        self.y = 0
+    }
+    
+    fn set_x(value) {
+        self.x = value
+        return self
+    }
+    
+    fn set_y(value) {
+        self.y = value
+        return self
+    }
+    
+    fn build() {
+        print("Built with:")
+        print(self.x)
+        print(self.y)
+        return self
+    }
+}
+
+let b = new Builder()
+b = b.set_x(10)
+b = b.set_y(20)
+b = b.build()
+print(b)

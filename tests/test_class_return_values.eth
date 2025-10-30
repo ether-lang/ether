@@ -1,0 +1,28 @@
+# Test methods that return values
+class Calculator {
+    fn add(a, b) {
+        return a + b
+    }
+    
+    fn multiply(a, b) {
+        return a * b
+    }
+    
+    fn square(x) {
+        return x * x
+    }
+}
+
+let calc = new Calculator()
+
+let sum = calc.add(5, 3)
+print("5 + 3 =")
+print(sum)
+
+let product = calc.multiply(4, 7)
+print("4 * 7 =")
+print(product)
+
+let squared = calc.square(9)
+print("9 * 9 =")
+print(squared)

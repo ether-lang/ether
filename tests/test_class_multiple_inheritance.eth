@@ -1,0 +1,30 @@
+# Test multiple inheritance
+class Flyer {
+    fn fly() {
+        print("I can fly!")
+    }
+}
+
+class Swimmer {
+    fn swim() {
+        print("I can swim!")
+    }
+}
+
+class Duck extends Flyer, Swimmer {
+    let name
+    
+    fn new(n) {
+        self.name = n
+    }
+    
+    fn introduce() {
+        print("I am a duck named")
+        print(self.name)
+    }
+}
+
+let donald = new Duck("Donald")
+donald.introduce()
+donald.fly()
+donald.swim()

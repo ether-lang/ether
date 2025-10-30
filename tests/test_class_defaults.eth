@@ -1,0 +1,33 @@
+# Test class with default field values
+class Person {
+    let name
+    let age
+    let city
+    
+    fn new(n) {
+        self.name = n
+        self.age = 0
+        self.city = "Unknown"
+    }
+    
+    fn set_age(a) {
+        self.age = a
+    }
+    
+    fn set_city(c) {
+        self.city = c
+    }
+    
+    fn display() {
+        print(self.name)
+        print(self.age)
+        print(self.city)
+    }
+}
+
+let person = new Person("Alice")
+person.display()
+
+person.set_age(25)
+person.set_city("Lagos")
+person.display()

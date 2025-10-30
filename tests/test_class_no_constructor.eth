@@ -1,0 +1,26 @@
+# Test class without constructor
+class Point {
+    let x
+    let y
+    
+    fn display() {
+        print("Point:")
+        print(self.x)
+        print(self.y)
+    }
+    
+    fn distance_from_origin() {
+        let dx = self.x * self.x
+        let dy = self.y * self.y
+        let sum = dx + dy
+        print("Distance squared:")
+        print(sum)
+        return sum
+    }
+}
+
+let p = new Point()
+p.x = 10
+p.y = 20
+p.display()
+p.distance_from_origin()

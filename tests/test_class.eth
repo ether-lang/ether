@@ -1,7 +1,7 @@
 class Animal {
     let name
     
-    fn __init__(n) {
+    fn new(n) {
         self.name = n
     }
     

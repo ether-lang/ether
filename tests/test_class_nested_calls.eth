@@ -1,0 +1,19 @@
+# Test nested method calls
+class Math {
+    fn add(a, b) {
+        return a + b
+    }
+    
+    fn double(x) {
+        return self.add(x, x)
+    }
+    
+    fn quadruple(x) {
+        return self.double(self.double(x))
+    }
+}
+
+let m = new Math()
+let result = m.quadruple(5)
+print("Quadruple of 5:")
+print(result)
