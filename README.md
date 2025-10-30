@@ -12,7 +12,7 @@ Status
 Goals & Vision
 - Build a fast, expressive language primarily aimed at AI researchers and systems programmers.
 - Provide first-class tensor primitives and convenient high-level constructs (pattern matching, errors, ranges, concise syntax).
-- Evolve into a modular toolchain: language spec -> compiler -> optimizer -> native backends.
+- Evolve into a complete toolchain: language spec -> compiler -> optimizer -> native backends.
 
 Key Features (implemented / in-progress)
 - Python/JS-like syntax
@@ -23,14 +23,9 @@ Key Features (implemented / in-progress)
 
 Quick start
 1. Install Rust (rustup) if you don't already have it: https://rustup.rs
-2. From the project root, build and run the demo:
+2. From the project root, build the pthe release binary:
 
-    cargo run
-
-This will build the crate and run the demo `main` in `src/main.rs`, which demonstrates core language features.
-
-Building the release binary:
-
+    
     cargo build --release
 
 Running as a library
