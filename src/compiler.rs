@@ -343,7 +343,8 @@ impl Compiler {
           // For instance methods, first parameter is implicitly 'self'
           if !is_static {
             let self_idx = self.get_var_index("self");
-            // self is already on the stack from the method call
+            // Store self from the stack to its variable location
+            self.emit(OpCode::StoreVar, self_idx as i32);
           }
 
           // Store parameters

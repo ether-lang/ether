@@ -839,7 +839,7 @@ impl VM {
         let instance_val = self.pop()?;
 
         if let (Value::Instance(instance_ref), Value::String(method)) =
-          (instance_val.clone(), method_name)
+          (instance_val.clone(), method_name.clone())
         {
           let instance = instance_ref.borrow();
 

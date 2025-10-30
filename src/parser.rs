@@ -76,7 +76,7 @@ impl Parser {
       TokenType::Try => self.parse_try(),
       TokenType::Throw => self.parse_throw(),
       TokenType::Raise => self.parse_raise(),
-      TokenType::Ident(_) => {
+      TokenType::Ident(_) | TokenType::Self_ => {
         // Save position in case we need to backtrack
         let start_pos = self.pos;
 
