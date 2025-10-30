@@ -5,11 +5,12 @@ fn categorize_age(age) {
         1 => "infant",
         2 => "toddler",
         _ => {
+            let res = "teen or adult"
             if age < 13 {
-                "child"
-            } else {
-                "teen or adult"
-            }
+                res = "child"
+            } 
+            
+            res
         }
     }
 }

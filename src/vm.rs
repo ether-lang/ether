@@ -100,6 +100,51 @@ impl VM {
     }
   }
 
+  fn values_equal(&self, a: &Value, b: &Value) -> bool {
+    match (a, b) {
+      (Value::Int(x), Value::Int(y)) => x == y,
+      (Value::Float(x), Value::Float(y)) => x == y,
+      (Value::Bool(x), Value::Bool(y)) => x == y,
+      (Value::String(x), Value::String(y)) => x == y,
+      (Value::Nil, Value::Nil) => true,
+      (Value::List(list_a), Value::List(list_b)) => {
+        let a = list_a.borrow();
+        let b = list_b.borrow();
+
+        if a.len() != b.len() {
+          return false;
+        }
+
+        for (val_a, val_b) in a.iter().zip(b.iter()) {
+          if !self.values_equal(val_a, val_b) {
+            return false;
+          }
+        }
+        true
+      }
+      (Value::Map(map_a), Value::Map(map_b)) => {
+        let a = map_a.borrow();
+        let b = map_b.borrow();
+
+        if a.len() != b.len() {
+          return false;
+        }
+
+        for (key, val_a) in a.iter() {
+          if let Some(val_b) = b.get(key) {
+            if !self.values_equal(val_a, val_b) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+        }
+        true
+      }
+      _ => false,
+    }
+  }
+
   pub fn run(&mut self) -> Result<(), String> {
     while self.pc < self.instructions.len() {
       let instr = self.instructions[self.pc].clone();
@@ -270,25 +315,13 @@ impl VM {
       OpCode::Eq => {
         let b = self.pop()?;
         let a = self.pop()?;
-        let result = match (a, b) {
-          (Value::Int(x), Value::Int(y)) => Value::Bool(x == y),
-          (Value::Float(x), Value::Float(y)) => Value::Bool(x == y),
-          (Value::Bool(x), Value::Bool(y)) => Value::Bool(x == y),
-          (Value::String(x), Value::String(y)) => Value::Bool(x == y),
-          _ => Value::Bool(false),
-        };
+        let result = Value::Bool(self.values_equal(&a, &b));
         self.push(result);
       }
       OpCode::Neq => {
         let b = self.pop()?;
         let a = self.pop()?;
-        let result = match (a, b) {
-          (Value::Int(x), Value::Int(y)) => Value::Bool(x != y),
-          (Value::Float(x), Value::Float(y)) => Value::Bool(x != y),
-          (Value::Bool(x), Value::Bool(y)) => Value::Bool(x != y),
-          (Value::String(x), Value::String(y)) => Value::Bool(x != y),
-          _ => Value::Bool(true),
-        };
+        let result = Value::Bool(!self.values_equal(&a, &b));
         self.push(result);
       }
       OpCode::Lt => {

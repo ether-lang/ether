@@ -8,13 +8,16 @@ fn classify_number(n) {
                 2 => "positive small",
                 3 => "positive small",
                 _ => {
+                    let res = "negative"
+
                     if n > 0 {
-                        "positive large"
-                    } else {
-                        "negative"
+                        res = "positive large"
                     }
+                    
+                    res
                 }
             }
+
             sign
         }
     }

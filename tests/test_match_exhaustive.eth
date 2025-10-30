@@ -18,4 +18,4 @@ strict_match(5)
 
 # Expected output:
 # one
-# No match (nil)
+# nil

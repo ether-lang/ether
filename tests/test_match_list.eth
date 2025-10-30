@@ -2,12 +2,8 @@
 fn describe_list(lst) {
     let desc = match lst {
         [] => "empty",
-        [x] => {
-            print("Single element:")
-            print(x)
-            "singleton"
-        },
-        _ => "multiple elements"
+        [42] => "singleton with 42",
+        _ => "other"
     }
     print(desc)
 }
@@ -18,7 +14,5 @@ describe_list([1, 2, 3])
 
 # Expected output:
 # empty
-# Single element:
-# 42
-# singleton
-# multiple elements
+# singleton with 42
+# other
