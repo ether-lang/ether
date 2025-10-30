@@ -1,0 +1,38 @@
+# Test match cases with multiple statements
+fn process_grade(grade) {
+    let feedback = match grade {
+        90 => {
+            print("Excellent!")
+            "A"
+        },
+        80 => {
+            print("Good job!")
+            "B"
+        },
+        70 => {
+            print("Not bad")
+            "C"
+        },
+        _ => {
+            print("Keep trying")
+            "F"
+        }
+    }
+    print("Grade:")
+    print(feedback)
+}
+
+process_grade(90)
+process_grade(75)
+process_grade(50)
+
+# Expected output:
+# Excellent!
+# Grade:
+# A
+# Keep trying
+# Grade:
+# F
+# Keep trying
+# Grade:
+# F

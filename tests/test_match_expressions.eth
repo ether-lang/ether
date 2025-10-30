@@ -1,23 +1,22 @@
-fn describe_number(n) {
-    let result = match n {
-        0 => { print("zero") },
-        1 => { print("one") },
-        2 => { print("two") },
-        _ => { print("many") }
+# Test match with complex expressions in cases
+fn calculate(op, a, b) {
+    let result = match op {
+        "add" => a + b,
+        "sub" => a - b,
+        "mul" => a * b,
+        "div" => a / b,
+        _ => 0
     }
+    print(result)
 }
 
-describe_number(0)
-describe_number(1)
-describe_number(5)
+calculate("add", 5, 3)
+calculate("mul", 4, 7)
+calculate("sub", 10, 3)
+calculate("unknown", 1, 2)
 
-fn classify_value(x) {
-    let result = match x {
-        true => { print("boolean true") },
-        false => { print("boolean false") },
-        _ => { print("other value") }
-    }
-}
-
-classify_value(true)
-classify_value(false)
+# Expected output:
+# 8
+# 28
+# 7
+# 0

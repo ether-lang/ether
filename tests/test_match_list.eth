@@ -1,0 +1,24 @@
+# Test match with list patterns
+fn describe_list(lst) {
+    let desc = match lst {
+        [] => "empty",
+        [x] => {
+            print("Single element:")
+            print(x)
+            "singleton"
+        },
+        _ => "multiple elements"
+    }
+    print(desc)
+}
+
+describe_list([])
+describe_list([42])
+describe_list([1, 2, 3])
+
+# Expected output:
+# empty
+# Single element:
+# 42
+# singleton
+# multiple elements

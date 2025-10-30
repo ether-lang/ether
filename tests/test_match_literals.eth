@@ -1,0 +1,22 @@
+# Test basic literal matching with integers
+fn describe_number(n) {
+    let result = match n {
+        0 => "zero",
+        1 => "one", 
+        2 => "two",
+        3 => "three",
+        _ => "many"
+    }
+    print(result)
+}
+
+describe_number(0)
+describe_number(1)
+describe_number(2)
+describe_number(5)
+
+# Expected output:
+# zero
+# one
+# two
+# many

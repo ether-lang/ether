@@ -1,0 +1,23 @@
+fn describe_number(n) {
+    let result = match n {
+        0 => { print("zero") },
+        1 => { print("one") },
+        2 => { print("two") },
+        _ => { print("many") }
+    }
+}
+
+describe_number(0)
+describe_number(1)
+describe_number(5)
+
+fn classify_value(x) {
+    let result = match x {
+        true => { print("boolean true") },
+        false => { print("boolean false") },
+        _ => { print("other value") }
+    }
+}
+
+classify_value(true)
+classify_value(false)

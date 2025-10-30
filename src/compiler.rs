@@ -542,62 +542,105 @@ impl Compiler {
         self.emit(OpCode::BuildRange, if *inclusive { 1 } else { 0 });
       }
       Expr::Match { value, cases } => {
-        self.compile_expr(value)?;
-        self.emit(OpCode::MatchBegin, 0);
-
-        let mut end_jumps = Vec::new();
-
-        for case in cases {
-          // let case_start = self.current_address();
-          self.emit(OpCode::MatchCase, 0); // Placeholder
-
-          // Compile pattern matching logic (simplified)
-          match &case.pattern {
+    self.compile_expr(value)?;
+    self.emit(OpCode::MatchBegin, 0);
+    
+    let mut end_jumps = Vec::new();
+    
+    for case in cases {
+        // Duplicate the match value for comparison (we need it for each case)
+        self.emit(OpCode::Dup, 0);
+        
+        // Compile pattern matching
+        match &case.pattern {
             Pattern::Wildcard => {
-              // Always matches
-              let idx = self.add_constant(Value::Bool(true));
-              self.emit(OpCode::LoadConst, idx as i32);
+                // Pop the duplicated value (wildcard always matches)
+                self.emit(OpCode::Pop, 0);
+                let idx = self.add_constant(Value::Bool(true));
+                self.emit(OpCode::LoadConst, idx as i32);
             }
             Pattern::Literal(expr) => {
-              self.compile_expr(expr)?;
-              self.emit(OpCode::Eq, 0);
+                self.compile_expr(expr)?;
+                self.emit(OpCode::Eq, 0);
             }
             Pattern::Ident(name) => {
-              // Bind to variable and match
-              let var_idx = self.get_var_index(name);
-              self.emit(OpCode::StoreVar, var_idx as i32);
-              let idx = self.add_constant(Value::Bool(true));
-              self.emit(OpCode::LoadConst, idx as i32);
+                // Bind to variable
+                let var_idx = self.get_var_index(name);
+                self.emit(OpCode::StoreVar, var_idx as i32);
+                let idx = self.add_constant(Value::Bool(true));
+                self.emit(OpCode::LoadConst, idx as i32);
             }
             _ => {
-              let idx = self.add_constant(Value::Bool(false));
-              self.emit(OpCode::LoadConst, idx as i32);
+                self.emit(OpCode::Pop, 0);
+                let idx = self.add_constant(Value::Bool(false));
+                self.emit(OpCode::LoadConst, idx as i32);
             }
-          }
-
-          let next_case_jump = self.current_address();
-          self.emit(OpCode::JumpIfFalse, 0);
-
-          // Compile case body
-          for stmt in &case.body {
-            self.compile_stmt(stmt)?;
-          }
-
-          let end_jump = self.current_address();
-          self.emit(OpCode::Jump, 0);
-          end_jumps.push(end_jump);
-
-          let next_case_addr = self.current_address();
-          self.instructions[next_case_jump].arg = next_case_addr as i32;
         }
-
-        let end_addr = self.current_address();
-        for jump in end_jumps {
-          self.instructions[jump].arg = end_addr as i32;
+        
+        let next_case_jump = self.current_address();
+        self.emit(OpCode::JumpIfFalse, 0);
+        
+        // Pop the match value since we've matched
+        self.emit(OpCode::Pop, 0);
+        
+        // Compile case body - it must leave exactly one value on stack
+        let mut case_leaves_value = false;
+        
+        for (i, stmt) in case.body.iter().enumerate() {
+            let is_last = i == case.body.len() - 1;
+            
+            match stmt {
+                Stmt::Return { value } => {
+                    // Return from the function, not just the match
+                    if let Some(v) = value {
+                        self.compile_expr(v)?;
+                    } else {
+                        let const_idx = self.add_constant(Value::Nil);
+                        self.emit(OpCode::LoadConst, const_idx as i32);
+                    }
+                    self.emit(OpCode::Return, 0);
+                    case_leaves_value = true;
+                }
+                Stmt::Expr(expr) if is_last => {
+                    // Last expression in case body becomes the result
+                    self.compile_expr(expr)?;
+                    case_leaves_value = true;
+                }
+                _ => {
+                    self.compile_stmt(stmt)?;
+                }
+            }
         }
-
-        self.emit(OpCode::MatchEnd, 0);
-      }
+        
+        // If case body didn't leave a value, push Void
+        if !case_leaves_value {
+            let const_idx = self.add_constant(Value::Nil);
+            self.emit(OpCode::LoadConst, const_idx as i32);
+        }
+        
+        // Jump to end (skip other cases)
+        let end_jump = self.current_address();
+        self.emit(OpCode::Jump, 0);
+        end_jumps.push(end_jump);
+        
+        // Patch the "next case" jump
+        let next_case_addr = self.current_address();
+        self.instructions[next_case_jump].arg = next_case_addr as i32;
+    }
+    
+    // If no case matched, pop the value and push Void
+    self.emit(OpCode::Pop, 0);
+    let const_idx = self.add_constant(Value::Nil);
+    self.emit(OpCode::LoadConst, const_idx as i32);
+    
+    // Patch all end jumps
+    let end_addr = self.current_address();
+    for jump in end_jumps {
+        self.instructions[jump].arg = end_addr as i32;
+    }
+    
+    self.emit(OpCode::MatchEnd, 0);
+}
       Expr::MemberAccess { object, member } => {
         self.compile_expr(object)?;
         let member_const = self.add_constant(Value::String(member.clone()));

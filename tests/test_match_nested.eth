@@ -1,0 +1,33 @@
+# Test nested match expressions
+fn classify_number(n) {
+    let category = match n {
+        0 => "zero",
+        _ => {
+            let sign = match n {
+                1 => "positive small",
+                2 => "positive small",
+                3 => "positive small",
+                _ => {
+                    if n > 0 {
+                        "positive large"
+                    } else {
+                        "negative"
+                    }
+                }
+            }
+            sign
+        }
+    }
+    print(category)
+}
+
+classify_number(0)
+classify_number(2)
+classify_number(100)
+classify_number(-5)
+
+# Expected output:
+# zero
+# positive small
+# positive large
+# negative

@@ -1,0 +1,31 @@
+# Test match with early returns
+fn get_sign(n) {
+    let sign = match n {
+        0 => {
+            return "zero"
+        },
+        _ => {
+            if n > 0 {
+                return "positive"
+            } else {
+                return "negative"
+            }
+        }
+    }
+    print("This shouldn't print")
+    return sign
+}
+
+let result1 = get_sign(0)
+print(result1)
+
+let result2 = get_sign(5)
+print(result2)
+
+let result3 = get_sign(-3)
+print(result3)
+
+# Expected output:
+# zero
+# positive
+# negative

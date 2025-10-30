@@ -1,0 +1,21 @@
+# Test binding in wildcard pattern
+fn describe_any(x) {
+    let desc = match x {
+        0 => "zero",
+        other => {
+            print("The value is:")
+            print(other)
+            "non-zero"
+        }
+    }
+    print(desc)
+}
+
+describe_any(0)
+describe_any(42)
+
+# Expected output:
+# zero
+# The value is:
+# 42
+# non-zero

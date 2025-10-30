@@ -1,0 +1,22 @@
+# Test match that doesn't assign result (nil)
+fn print_status(status) {
+    match status {
+        1 => { print("Starting") },
+        2 => { print("Running") },
+        3 => { print("Stopping") },
+        _ => { print("Unknown") }
+    }
+    print("Status check complete")
+}
+
+print_status(1)
+print_status(2)
+print_status(99)
+
+# Expected output:
+# Starting
+# Status check complete
+# Running
+# Status check complete
+# Unknown
+# Status check complete

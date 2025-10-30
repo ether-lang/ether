@@ -16,11 +16,7 @@ Quick build
 
     cargo build
 
-3. Run the demo program (the repository's `main` runs embedded examples):
-
-    cargo run
-
-4. Build (release optimized):
+3. Build (release optimized):
 
     cargo build --release
 

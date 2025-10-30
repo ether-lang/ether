@@ -1,0 +1,15 @@
+# Test boolean matching
+fn classify_bool(x) {
+    let result = match x {
+        true => "yes",
+        false => "no"
+    }
+    print(result)
+}
+
+classify_bool(true)
+classify_bool(false)
+
+# Expected output:
+# yes
+# no

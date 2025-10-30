@@ -1,0 +1,26 @@
+# Test match expression directly in return
+fn categorize_age(age) {
+    return match age {
+        0 => "newborn",
+        1 => "infant",
+        2 => "toddler",
+        _ => {
+            if age < 13 {
+                "child"
+            } else {
+                "teen or adult"
+            }
+        }
+    }
+}
+
+print(categorize_age(0))
+print(categorize_age(2))
+print(categorize_age(5))
+print(categorize_age(15))
+
+# Expected output:
+# newborn
+# toddler
+# child
+# teen or adult

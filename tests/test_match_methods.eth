@@ -1,0 +1,45 @@
+# Test match with method calls in cases
+class Handler {
+    fn handle_success() {
+        print("Success!")
+        return "ok"
+    }
+    
+    fn handle_error() {
+        print("Error!")
+        return "fail"
+    }
+    
+    fn handle_unknown() {
+        print("Unknown status")
+        return "unknown"
+    }
+}
+
+fn process_status(status) {
+    let handler = new Handler()
+    
+    let result = match status {
+        200 => handler.handle_success(),
+        500 => handler.handle_error(),
+        _ => handler.handle_unknown()
+    }
+    
+    print("Result:")
+    print(result)
+}
+
+process_status(200)
+process_status(500)
+process_status(404)
+
+# Expected output:
+# Success!
+# Result:
+# ok
+# Error!
+# Result:
+# fail
+# Unknown status
+# Result:
+# unknown

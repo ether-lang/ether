@@ -1,0 +1,21 @@
+# Test that match without wildcard returns nil if no match
+fn strict_match(x) {
+    let result = match x {
+        1 => "one",
+        2 => "two",
+        3 => "three"
+    }
+    
+    if result == 0 {
+        print("No match (nil)")
+    } else {
+        print(result)
+    }
+}
+
+strict_match(1)
+strict_match(5)
+
+# Expected output:
+# one
+# No match (nil)
