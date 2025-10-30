@@ -1,0 +1,14 @@
+class Animal {
+    let name
+    
+    fn __init__(n) {
+        self.name = n
+    }
+    
+    fn speak() {
+        print(self.name)
+    }
+}
+
+let dog = new Animal("Buddy")
+dog.speak()
