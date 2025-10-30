@@ -317,9 +317,9 @@ impl Compiler {
 
         // Add fields
         for (field_name, default_expr, is_private) in fields {
-          let default_value = if let Some(expr) = default_expr {
+          let default_value = if let Some(_expr) = default_expr {
             // Compile and evaluate the default expression
-            // For simplicity, we'll just use Void for now
+            // For simplicity, we'll just use Nil for now
             // You could extend this to evaluate constant expressions
             None
           } else {
@@ -334,7 +334,7 @@ impl Compiler {
         self.current_class = Some(name.clone());
 
         // Compile methods
-        for (method_name, params, body, return_type, is_static, is_private) in methods {
+        for (method_name, params, body, _return_type, is_static, is_private) in methods {
           let jump_addr = self.current_address();
           self.emit(OpCode::Jump, 0);
 

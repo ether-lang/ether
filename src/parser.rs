@@ -78,7 +78,7 @@ impl Parser {
       TokenType::Raise => self.parse_raise(),
       TokenType::Ident(_) | TokenType::Self_ => {
         // Save position in case we need to backtrack
-        let start_pos = self.pos;
+        let _start_pos = self.pos;
 
         // Parse the full expression (including member access)
         let expr = self.parse_expression()?;

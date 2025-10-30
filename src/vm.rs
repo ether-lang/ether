@@ -784,7 +784,7 @@ impl VM {
       }
       OpCode::NewInstance => {
         let class_val = self.pop()?;
-        let arg_count = instr.arg as usize;
+        let _arg_count = instr.arg as usize;
 
         if let Value::Class(class_def) = class_val {
           let instance = Instance::new(Rc::clone(&class_def));
