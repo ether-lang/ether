@@ -1,4 +1,4 @@
-fn process_data(data) {
+def process_data(data) {
     let results = [1]
     
     for item in data {

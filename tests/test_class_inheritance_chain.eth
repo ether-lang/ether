@@ -2,25 +2,25 @@
 class Animal {
     let name
     
-    fn new(n) {
+    def new(n) {
         self.name = n
     }
     
-    fn eat() {
+    def eat() {
         print(self.name)
         print("is eating")
     }
 }
 
 class Mammal extends Animal {
-    fn feed_young() {
+    def feed_young() {
         print(self.name)
         print("feeds its young")
     }
 }
 
 class Dog extends Mammal {
-    fn bark() {
+    def bark() {
         print(self.name)
         print("says: Woof!")
     }

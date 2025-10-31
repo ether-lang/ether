@@ -12,7 +12,7 @@ pub enum TokenType {
 
   // Keywords
   Let,
-  Fn,
+  Def,
   Return,
   If,
   Else,
@@ -227,7 +227,7 @@ impl Lexer {
 
     match ident.as_str() {
       "let" => TokenType::Let,
-      "fn" => TokenType::Fn,
+      "def" => TokenType::Def,
       "return" => TokenType::Return,
       "if" => TokenType::If,
       "else" => TokenType::Else,

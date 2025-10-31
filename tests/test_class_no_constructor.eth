@@ -3,13 +3,13 @@ class Point {
     let x
     let y
     
-    fn display() {
+    def display() {
         print("Point:")
         print(self.x)
         print(self.y)
     }
     
-    fn distance_from_origin() {
+    def distance_from_origin() {
         let dx = self.x * self.x
         let dy = self.y * self.y
         let sum = dx + dy

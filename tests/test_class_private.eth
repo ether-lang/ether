@@ -2,11 +2,11 @@
 class BankAccount {
     let balance
     
-    fn new(initial) {
+    def new(initial) {
         self.balance = initial
     }
     
-    private fn _validate(amount) {
+    private def _validate(amount) {
         if amount > 0 {
             return true
         } else {
@@ -14,7 +14,7 @@ class BankAccount {
         }
     }
     
-    fn deposit(amount) {
+    def deposit(amount) {
         if self._validate(amount) {
             self.balance = self.balance + amount
             print("Deposited:")
@@ -22,7 +22,7 @@ class BankAccount {
         }
     }
     
-    fn get_balance() {
+    def get_balance() {
         print("Balance:")
         print(self.balance)
     }

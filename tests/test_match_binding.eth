@@ -1,5 +1,5 @@
 # Test binding in wildcard pattern
-fn describe_any(x) {
+def describe_any(x) {
     let desc = match x {
         0 => "zero",
         other => {

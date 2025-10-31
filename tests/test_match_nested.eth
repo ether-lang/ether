@@ -1,5 +1,5 @@
 # Test nested match expressions
-fn classify_number(n) {
+def classify_number(n) {
     let category = match n {
         0 => "zero",
         _ => {

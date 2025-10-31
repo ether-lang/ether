@@ -1,6 +1,6 @@
 # Test exception handling with finally block
 
-fn test_finally() {
+def test_finally() {
     try {
         print("In try block")
         throw "Error occurred"
@@ -17,7 +17,7 @@ test_finally()
 
 print("---")
 
-fn test_finally_no_error() {
+def test_finally_no_error() {
     try {
         print("Try block - no error")
     } finally {

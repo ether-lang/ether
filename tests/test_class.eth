@@ -1,11 +1,11 @@
 class Animal {
     let name
     
-    fn new(n) {
+    def new(n) {
         self.name = n
     }
     
-    fn speak() {
+    def speak() {
         print(self.name)
     }
 }

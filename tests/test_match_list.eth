@@ -1,5 +1,5 @@
 # Test match with list patterns
-fn describe_list(lst) {
+def describe_list(lst) {
     let desc = match lst {
         [] => "empty",
         [42] => "singleton with 42",

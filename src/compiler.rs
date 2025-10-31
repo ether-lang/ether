@@ -18,6 +18,7 @@ pub struct Compiler {
   function_addresses: HashMap<String, usize>,
   classes: HashMap<String, Rc<ClassDef>>,
   current_class: Option<String>,
+  scope_stack: Vec<HashMap<String, usize>>, // Add this
   is_repl: bool,
 }
 
@@ -31,6 +32,7 @@ impl Compiler {
       function_addresses: HashMap::new(),
       classes: HashMap::new(),
       current_class: None,
+      scope_stack: Vec::new(),
       is_repl: false,
     }
   }
@@ -44,6 +46,7 @@ impl Compiler {
       function_addresses: HashMap::new(),
       classes: HashMap::new(),
       current_class: None,
+      scope_stack: Vec::new(),
       is_repl: true,
     }
   }
@@ -82,6 +85,23 @@ impl Compiler {
 
   fn current_address(&self) -> usize {
     self.instructions.len()
+  }
+
+  fn enter_scope(&mut self) {
+    // Save current variable bindings
+    self.scope_stack.push(self.var_indices.clone());
+    // Reset for new scope
+    self.var_indices.clear();
+    self.next_var_index = 0;
+  }
+
+  fn exit_scope(&mut self) {
+    // Restore previous variable bindings
+    if let Some(prev_scope) = self.scope_stack.pop() {
+      self.var_indices = prev_scope;
+      // Recalculate next_var_index
+      self.next_var_index = self.var_indices.values().max().map(|v| v + 1).unwrap_or(0);
+    }
   }
 
   fn compile_match_case_body(&mut self, body: &[Stmt]) -> Result<(), String> {
@@ -127,6 +147,7 @@ impl Compiler {
   }
 
   pub fn compile(&mut self, statements: &[Stmt]) -> Result<(), String> {
+    // Global scope - don't use enter_scope/exit_scope
     for stmt in statements {
       self.compile_stmt(stmt)?;
     }
@@ -178,6 +199,10 @@ impl Compiler {
         let func_addr = self.current_address();
         self.function_addresses.insert(name.clone(), func_addr);
 
+        // Enter new scope for function
+        self.enter_scope();
+
+        // Store parameters (in reverse order since they're on stack)
         for (param_name, param_type) in params.iter().rev() {
           if let Some(expected_type) = param_type {
             let type_const = self.add_constant(Value::String(format!("{}", expected_type)));
@@ -189,13 +214,18 @@ impl Compiler {
           self.emit(OpCode::StoreVar, idx as i32);
         }
 
+        // Compile function body
         for stmt in body {
           self.compile_stmt(stmt)?;
         }
 
+        // Default return
         let const_idx = self.add_constant(Value::Nil);
         self.emit(OpCode::LoadConst, const_idx as i32);
         self.emit(OpCode::Return, 0);
+
+        // Exit function scope
+        self.exit_scope();
 
         let end_addr = self.current_address();
         self.instructions[jump_addr].arg = end_addr as i32;
@@ -382,7 +412,10 @@ impl Compiler {
 
           let method_addr = self.current_address();
 
-          // Store parameters in REVERSE order (top to bottom)
+          // Enter new scope for method
+          self.enter_scope();
+
+          // Store parameters in REVERSE order (top to bottom of stack)
           for (param_name, _) in params.iter().rev() {
             let idx = self.get_var_index(param_name);
             self.emit(OpCode::StoreVar, idx as i32);
@@ -403,6 +436,9 @@ impl Compiler {
           let const_idx = self.add_constant(Value::Nil);
           self.emit(OpCode::LoadConst, const_idx as i32);
           self.emit(OpCode::Return, 0);
+
+          // Exit method scope
+          self.exit_scope();
 
           let end_addr = self.current_address();
           self.instructions[jump_addr].arg = end_addr as i32;

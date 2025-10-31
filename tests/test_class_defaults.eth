@@ -4,21 +4,21 @@ class Person {
     let age
     let city
     
-    fn new(n) {
+    def new(n) {
         self.name = n
         self.age = 0
         self.city = "Unknown"
     }
     
-    fn set_age(a) {
+    def set_age(a) {
         self.age = a
     }
     
-    fn set_city(c) {
+    def set_city(c) {
         self.city = c
     }
     
-    fn display() {
+    def display() {
         print(self.name)
         print(self.age)
         print(self.city)

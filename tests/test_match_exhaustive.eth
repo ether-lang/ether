@@ -1,5 +1,5 @@
 # Test that match without wildcard returns nil if no match
-fn strict_match(x) {
+def strict_match(x) {
     let result = match x {
         1 => "one",
         2 => "two",

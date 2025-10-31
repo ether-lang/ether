@@ -1,5 +1,5 @@
 # Test match that doesn't assign result (nil)
-fn print_status(status) {
+def print_status(status) {
     match status {
         1 => { print("Starting") },
         2 => { print("Running") },

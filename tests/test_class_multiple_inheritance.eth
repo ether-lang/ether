@@ -1,12 +1,12 @@
 # Test multiple inheritance
 class Flyer {
-    fn fly() {
+    def fly() {
         print("I can fly!")
     }
 }
 
 class Swimmer {
-    fn swim() {
+    def swim() {
         print("I can swim!")
     }
 }
@@ -14,11 +14,11 @@ class Swimmer {
 class Duck extends Flyer, Swimmer {
     let name
     
-    fn new(n) {
+    def new(n) {
         self.name = n
     }
     
-    fn introduce() {
+    def introduce() {
         print("I am a duck named")
         print(self.name)
     }

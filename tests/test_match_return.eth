@@ -1,5 +1,5 @@
 # Test match with early returns
-fn get_sign(n) {
+def get_sign(n) {
     let sign = match n {
         0 => {
             return "zero"

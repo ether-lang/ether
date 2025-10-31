@@ -1,7 +1,7 @@
 # Test variable capture in nested functions
 
-fn outer(x) {
-    fn inner(y) {
+def outer(x) {
+    def inner(y) {
         return x + y
     }
     return inner(10)

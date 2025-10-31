@@ -1,0 +1,33 @@
+# Test nested scopes and variable shadowing
+def outer(x) {
+    let y = x + 1
+    
+    def middle(x) {
+        let y = x + 10
+        
+        def inner(x) {
+            let y = x + 100
+            return y
+        }
+        
+        return inner(x) + y
+    }
+    
+    return middle(x) + y
+}
+
+let result = outer(5)
+print("Nested scope result:")
+print(result)
+
+# With outer(5):
+# outer: x=5, y=6
+# middle: x=5, y=15
+# inner: x=5, y=105
+# inner returns 105
+# middle returns 105 + 15 = 120
+# outer returns 120 + 6 = 126
+
+# Expected output:
+# Nested scope result:
+# 126

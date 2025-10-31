@@ -1,5 +1,5 @@
 # Test string matching
-fn greet(lang) {
+def greet(lang) {
     let greeting = match lang {
         "en" => "Hello",
         "es" => "Hola",

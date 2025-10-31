@@ -1,5 +1,5 @@
 # Test match with complex expressions in cases
-fn calculate(op, a, b) {
+def calculate(op, a, b) {
     let result = match op {
         "add" => a + b,
         "sub" => a - b,

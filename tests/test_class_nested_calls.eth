@@ -1,14 +1,14 @@
 # Test nested method calls
 class Math {
-    fn add(a, b) {
+    def add(a, b) {
         return a + b
     }
     
-    fn double(x) {
+    def double(x) {
         return self.add(x, x)
     }
     
-    fn quadruple(x) {
+    def quadruple(x) {
         return self.double(self.double(x))
     }
 }

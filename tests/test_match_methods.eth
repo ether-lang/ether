@@ -1,22 +1,22 @@
 # Test match with method calls in cases
 class Handler {
-    fn handle_success() {
+    def handle_success() {
         print("Success!")
         return "ok"
     }
     
-    fn handle_error() {
+    def handle_error() {
         print("Error!")
         return "fail"
     }
     
-    fn handle_unknown() {
+    def handle_unknown() {
         print("Unknown status")
         return "unknown"
     }
 }
 
-fn process_status(status) {
+def process_status(status) {
     let handler = new Handler()
     
     let result = match status {

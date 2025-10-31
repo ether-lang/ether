@@ -1,5 +1,5 @@
 # Test boolean matching
-fn classify_bool(x) {
+def classify_bool(x) {
     let result = match x {
         true => "yes",
         false => "no"

@@ -4,21 +4,21 @@ class Student {
     let grades
     let info
     
-    fn new(n) {
+    def new(n) {
         self.name = n
         self.grades = [1]
         self.info = {}
     }
     
-    fn add_grade(grade) {
+    def add_grade(grade) {
         self.grades[0] = grade
     }
     
-    fn set_info(key, value) {
+    def set_info(key, value) {
         self.info[key] = value
     }
     
-    fn display() {
+    def display() {
         print("Student:")
         print(self.name)
         print("Grades:")

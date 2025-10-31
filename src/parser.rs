@@ -67,7 +67,7 @@ impl Parser {
   fn parse_statement(&mut self) -> Result<Stmt, String> {
     match &self.current().ttype {
       TokenType::Let => self.parse_let(),
-      TokenType::Fn => self.parse_function(),
+      TokenType::Def => self.parse_function(),
       TokenType::Class => self.parse_class(),
       TokenType::Return => self.parse_return(),
       TokenType::If => self.parse_if(),
@@ -428,7 +428,7 @@ impl Parser {
         false
       };
 
-      if matches!(self.current().ttype, TokenType::Fn) {
+      if matches!(self.current().ttype, TokenType::Def) {
         self.advance();
 
         let method_name = match &self.current().ttype {

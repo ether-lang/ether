@@ -1,5 +1,5 @@
 # Test match result used in arithmetic
-fn fibonacci_like(n) {
+def fibonacci_like(n) {
     let result = match n {
         0 => 0,
         1 => 1,

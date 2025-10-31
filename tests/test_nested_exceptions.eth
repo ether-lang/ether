@@ -1,6 +1,6 @@
 # Test nested try-catch blocks
 
-fn outer_function() {
+def outer_function() {
     try {
         print("Outer try")
         

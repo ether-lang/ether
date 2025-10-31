@@ -3,22 +3,22 @@ class Builder {
     let x
     let y
     
-    fn new() {
+    def new() {
         self.x = 0
         self.y = 0
     }
     
-    fn set_x(value) {
+    def set_x(value) {
         self.x = value
         return self
     }
     
-    fn set_y(value) {
+    def set_y(value) {
         self.y = value
         return self
     }
     
-    fn build() {
+    def build() {
         print("Built with:")
         print(self.x)
         print(self.y)

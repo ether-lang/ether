@@ -2,15 +2,15 @@
 class Counter {
     let count
     
-    fn new() {
+    def new() {
         self.count = 0
     }
     
-    fn increment() {
+    def increment() {
         self.count = self.count + 1
     }
     
-    fn get_count() {
+    def get_count() {
         print("Count:")
         print(self.count)
     }

@@ -2,15 +2,15 @@
 class Animal {
     let name
     
-    fn new(n) {
+    def new(n) {
         self.name = n
     }
     
-    fn speak() {
+    def speak() {
         print("Animal speaks")
     }
     
-    fn introduce() {
+    def introduce() {
         print("I am")
         print(self.name)
     }
@@ -19,16 +19,16 @@ class Animal {
 class Dog extends Animal {
     let breed
     
-    fn new(n, b) {
+    def new(n, b) {
         super(n)
         self.breed = b
     }
     
-    fn speak() {
+    def speak() {
         print("Woof!")
     }
     
-    fn show_breed() {
+    def show_breed() {
         print("Breed:")
         print(self.breed)
     }

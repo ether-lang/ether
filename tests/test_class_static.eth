@@ -1,10 +1,10 @@
 # Test static methods
 class MathUtils {
-    static fn pi() {
+    static def pi() {
         return 3.14159
     }
     
-    static fn max(a, b) {
+    static def max(a, b) {
         if a > b {
             return a
         } else {

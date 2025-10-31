@@ -10,6 +10,14 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct StackFrame {
+  return_addr: usize,
+  base_pointer: usize, // Where this frame's variables start in the variables vector
+  var_count: usize,    // Number of variables in this frame
+}
+
+#[derive(Debug, Clone)]
 struct TryHandler {
   call_site_pc: usize,
   catch_addr: usize,
@@ -21,6 +29,7 @@ struct ForInIterator {
   items: Vec<Value>,
   index: usize,
   var_idx: usize,
+  base_pointer: usize, // Add this field
 }
 
 pub struct VM {
@@ -29,7 +38,8 @@ pub struct VM {
   pub stack: Vec<Value>,
   variables: Vec<Value>,
   pc: usize,
-  call_stack: Vec<usize>,
+  call_stack: Vec<StackFrame>,
+  base_pointer: usize,
   try_stack: Vec<TryHandler>,
   for_in_stack: Vec<ForInIterator>,
   error: Option<Value>,
@@ -41,9 +51,10 @@ impl VM {
       instructions,
       constants,
       stack: Vec::with_capacity(256),
-      variables: vec![Value::Nil; 256],
+      variables: Vec::with_capacity(256),
       pc: 0,
       call_stack: Vec::new(),
+      base_pointer: 0,
       try_stack: Vec::new(),
       for_in_stack: Vec::new(),
       error: None,
@@ -83,7 +94,16 @@ impl VM {
   }
 
   fn get_call_site_pc(&mut self) -> usize {
-    *self.call_stack.last().or(Some(&0)).unwrap()
+    self
+      .call_stack
+      .last()
+      .or(Some(&StackFrame {
+        return_addr: 0,
+        base_pointer: 0,
+        var_count: 0,
+      }))
+      .unwrap()
+      .base_pointer
   }
 
   fn pop_call_stack_to_try_site(&mut self) {
@@ -202,12 +222,27 @@ impl VM {
         self.push(val);
       }
       OpCode::LoadVar => {
-        let val = self.variables[instr.arg as usize].clone();
-        self.push(val);
+        let local_idx = instr.arg as usize;
+        let actual_idx = self.base_pointer + local_idx;
+
+        if actual_idx < self.variables.len() {
+          let val = self.variables[actual_idx].clone();
+          self.push(val);
+        } else {
+          return Err(format!("Undefined variable at index {}", local_idx));
+        }
       }
       OpCode::StoreVar => {
         let val = self.pop()?;
-        self.variables[instr.arg as usize] = val;
+        let local_idx = instr.arg as usize;
+        let actual_idx = self.base_pointer + local_idx;
+
+        // Grow variables vector if needed
+        while self.variables.len() <= actual_idx {
+          self.variables.push(Value::Nil);
+        }
+
+        self.variables[actual_idx] = val;
       }
       OpCode::Add => {
         let b = self.pop()?;
@@ -400,16 +435,39 @@ impl VM {
         }
       }
       OpCode::Call => {
-        self.call_stack.push(self.pc);
+        // Save current frame info
+        let frame = StackFrame {
+          return_addr: self.pc,
+          base_pointer: self.base_pointer,
+          var_count: 0, // Will be set by the callee if needed
+        };
+
+        self.call_stack.push(frame);
+
+        // Set new base pointer to current variable count
+        self.base_pointer = self.variables.len();
+
+        // Jump to function
         self.pc = instr.arg as usize - 1;
       }
       OpCode::Return => {
         let return_val = self.pop().unwrap_or(Value::Nil);
 
-        if let Some(return_addr) = self.call_stack.pop() {
-          self.pc = return_addr;
+        if let Some(frame) = self.call_stack.pop() {
+          // Restore the previous frame's base pointer
+          let old_base = self.base_pointer;
+          self.base_pointer = frame.base_pointer;
+
+          // Clean up local variables from the returning function
+          self.variables.truncate(old_base);
+
+          // Restore program counter
+          self.pc = frame.return_addr;
+
+          // Push return value
           self.push(return_val);
         } else {
+          // Returning from main/top-level
           self.pc = self.instructions.len();
         }
       }
@@ -639,13 +697,21 @@ impl VM {
           items,
           index: 0,
           var_idx,
+          base_pointer: self.base_pointer, // Store current base pointer
         });
       }
       OpCode::ForInNext => {
         if let Some(iterator) = self.for_in_stack.last_mut() {
           if iterator.index < iterator.items.len() {
             let item = iterator.items[iterator.index].clone();
-            self.variables[iterator.var_idx] = item;
+            let actual_idx = iterator.base_pointer + iterator.var_idx;
+
+            // Grow variables vector if needed
+            while self.variables.len() <= actual_idx {
+              self.variables.push(Value::Nil);
+            }
+
+            self.variables[actual_idx] = item;
             iterator.index += 1;
           } else {
             self.pc = instr.arg as usize - 1;
@@ -897,10 +963,9 @@ impl VM {
         }
         args.reverse();
 
-        let target_val = self.pop()?;
+        let instance_val = self.pop()?;
 
-        // Check if it's a class (static method) or instance (instance method)
-        match target_val {
+        match instance_val {
           Value::Instance(instance_ref) => {
             if let Value::String(method) = method_name {
               let method_addr = {
@@ -922,8 +987,14 @@ impl VM {
                   self.push(arg);
                 }
 
-                // Call the method
-                self.call_stack.push(self.pc);
+                // Create stack frame and call the method
+                let frame = StackFrame {
+                  return_addr: self.pc,
+                  base_pointer: self.base_pointer,
+                  var_count: 0,
+                };
+                self.call_stack.push(frame);
+                self.base_pointer = self.variables.len();
                 self.pc = addr - 1;
               } else {
                 return Err(format!("Method '{}' not found", method));
@@ -941,8 +1012,14 @@ impl VM {
                   self.push(arg);
                 }
 
-                // Call the static method
-                self.call_stack.push(self.pc);
+                // Create stack frame and call the static method
+                let frame = StackFrame {
+                  return_addr: self.pc,
+                  base_pointer: self.base_pointer,
+                  var_count: 0,
+                };
+                self.call_stack.push(frame);
+                self.base_pointer = self.variables.len();
                 self.pc = static_method.address - 1;
               } else {
                 return Err(format!(
@@ -957,7 +1034,7 @@ impl VM {
           _ => {
             return Err(format!(
               "Invalid method call - expected instance or class, got {}",
-              target_val.type_name()
+              instance_val.type_name()
             ));
           }
         }
@@ -1000,7 +1077,14 @@ impl VM {
                   self.push(arg);
                 }
 
-                self.call_stack.push(self.pc);
+                // Create stack frame and call super method
+                let frame = StackFrame {
+                  return_addr: self.pc,
+                  base_pointer: self.base_pointer,
+                  var_count: 0,
+                };
+                self.call_stack.push(frame);
+                self.base_pointer = self.variables.len();
                 self.pc = addr - 1;
               } else {
                 return Err(format!(

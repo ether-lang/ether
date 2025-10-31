@@ -1,11 +1,11 @@
-fn divide_safe(a, b) {
+def divide_safe(a, b) {
     if b == 0 {
         raise DivisionError("Cannot divide by zero")
     }
     return a / b
 }
 
-fn process_values(x, y) {
+def process_values(x, y) {
     try {
         let result = divide_safe(x, y)
         print(result)

@@ -1,5 +1,5 @@
 # Test match cases with multiple statements
-fn process_grade(grade) {
+def process_grade(grade) {
     let feedback = match grade {
         90 => {
             print("Excellent!")

@@ -1,5 +1,5 @@
 # Test match expression directly in return
-fn categorize_age(age) {
+def categorize_age(age) {
     return match age {
         0 => "newborn",
         1 => "infant",

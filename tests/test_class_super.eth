@@ -2,11 +2,11 @@
 class Base {
     let value
     
-    fn new(v) {
+    def new(v) {
         self.value = v
     }
     
-    fn process() {
+    def process() {
         print("Base processing:")
         print(self.value)
         return self.value
@@ -14,11 +14,11 @@ class Base {
 }
 
 class Derived extends Base {
-    fn new(v) {
+    def new(v) {
         super(v * 2)
     }
     
-    fn process() {
+    def process() {
         print("Derived processing first")
         let result = super.process()
         print("Derived processing after")
@@ -30,3 +30,12 @@ let obj = new Derived(5)
 let final_result = obj.process()
 print("Final result:")
 print(final_result)
+
+
+# Expected output:
+# Derived processing first
+# Base processing:
+# 10
+# Derived processing after
+# Final result:
+# 20

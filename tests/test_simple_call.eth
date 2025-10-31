@@ -1,4 +1,4 @@
-fn test() -> number {
+def test() -> number {
     return 42
 }
 

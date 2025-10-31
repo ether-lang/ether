@@ -1,5 +1,5 @@
 # Test basic literal matching with integers
-fn describe_number(n) {
+def describe_number(n) {
     let result = match n {
         0 => "zero",
         1 => "one", 

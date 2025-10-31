@@ -1,6 +1,6 @@
 # Test recursive functions
 
-fn factorial(n) {
+def factorial(n) {
     if n <= 1 {
         return 1
     } else {
@@ -14,7 +14,7 @@ print(factorial(5))
 print("Factorial of 0:")
 print(factorial(0))
 
-fn fibonacci(n) {
+def fibonacci(n) {
     if n <= 1 {
         return n
     } else {
