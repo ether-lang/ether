@@ -245,13 +245,6 @@ impl VM {
 
         if actual_idx < self.variables.len() {
           let val = self.variables[actual_idx].clone();
-          println!(
-            "DEBUG LoadVar: local_idx={}, base_pointer={}, actual_idx={}, value type={}",
-            local_idx,
-            self.base_pointer,
-            actual_idx,
-            val.type_name()
-          );
           self.push(val);
         } else {
           return Err(format!("Undefined variable at index {}", local_idx));
@@ -261,15 +254,6 @@ impl VM {
         let val = self.pop()?;
         let local_idx = instr.arg as usize;
         let actual_idx = self.base_pointer + local_idx;
-
-        println!(
-          "DEBUG StoreVar: local_idx={}, base_pointer={}, actual_idx={}, value type={}",
-          local_idx,
-          self.base_pointer,
-          actual_idx,
-          val.type_name()
-        );
-
         // Grow variables vector if needed
         while self.variables.len() <= actual_idx {
           self.variables.push(Value::Nil);
@@ -1008,18 +992,10 @@ impl VM {
         let field_name = self.pop()?;
         let object_val = self.pop()?;
 
-        // println!(
-        //   "DEBUG SetField: object_val type = {}, field_name = {:?}, value = {:?}",
-        //   object_val.type_name(),
-        //   field_name,
-        //   value
-        // );
-
         if let Value::Instance(instance_ref) = object_val {
           if let Value::String(name) = field_name {
             let mut instance = instance_ref.borrow_mut();
             instance.set_field(&name, value);
-            // println!("DEBUG: Successfully set field '{}' on instance", name);
           } else {
             return Err(format!(
               "Field name must be a name, got {}",

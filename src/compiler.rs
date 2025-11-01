@@ -91,30 +91,14 @@ impl Compiler {
 
   fn get_var_index(&mut self, name: &str) -> usize {
     if let Some(&idx) = self.var_indices.get(name) {
-      println!(
-        "DEBUG get_var_index: '{}' already exists at index {}",
-        name, idx
-      );
       idx
     } else {
       let idx = self.next_var_index;
-      println!(
-        "DEBUG get_var_index: '{}' is NEW, assigning index {}",
-        name, idx
-      );
-      println!(
-        "DEBUG get_var_index: is_in_global_scope = {}",
-        self.is_in_global_scope
-      );
       self.var_indices.insert(name.to_string(), idx);
       self.next_var_index += 1;
 
       // If we're in global scope, record this as a global variable
       if self.is_in_global_scope {
-        println!(
-          "DEBUG get_var_index: Recording '{}' as global at index {}",
-          name, idx
-        );
         self.global_var_names.insert(idx, name.to_string());
       }
 
@@ -529,12 +513,6 @@ impl Compiler {
 
         let module = loader.load_module(path, &self.current_file)?;
 
-        println!(
-          "DEBUG: Loaded module '{}', exports: {:?}",
-          module.name,
-          module.exports.keys()
-        );
-
         // Store module as a value
         let const_idx = self.add_constant(Value::Module(module));
         self.emit(OpCode::LoadConst, const_idx as i32);
@@ -554,10 +532,7 @@ impl Compiler {
             .to_string()
         };
 
-        println!("DEBUG: Binding module to variable: {}", binding_name);
-
         let var_idx = self.get_var_index(&binding_name);
-        println!("DEBUG: Variable index: {}", var_idx);
         self.emit(OpCode::StoreVar, var_idx as i32);
       }
       Stmt::Expr(expr) => {
