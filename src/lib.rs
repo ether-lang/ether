@@ -2,10 +2,13 @@
 // MAIN API
 // ============================================================================
 
+use std::{collections::HashMap, path::Path};
+
 pub mod ast;
 pub mod compiler;
 pub mod instruction;
 pub mod lexer;
+pub mod module;
 pub mod parser;
 pub mod types;
 pub mod value;
@@ -20,7 +23,7 @@ pub type Result<T> = std::result::Result<T, String>;
 impl Ether {
   pub fn new() -> Self {
     Self {
-      vm: vm::VM::new(vec![], vec![]),
+      vm: vm::VM::new(vec![], vec![], HashMap::new()),
     }
   }
 
@@ -38,10 +41,20 @@ impl Ether {
   pub fn execute_repl(&mut self, source: &str) -> Result<()> {
     let tokens = lexer::tokenize(source)?;
     let ast = parser::parse(tokens)?;
-    let bytecode = compiler::compile_repl(&ast)?;
+
+    let filepath = std::path::Path::new("<repl>.eth");
+
+    let mut loader = module::ModuleLoader::new();
+    loader.set_startup_script_dir(filepath);
+
+    let mut compiler = compiler::Compiler::new();
+    compiler.set_current_file(filepath.to_path_buf());
+    compiler.set_module_loader(loader);
+    compiler.compile(&ast)?;
+
     self.vm.reset(
-      bytecode.get_instructions().to_vec(),
-      bytecode.get_constants().to_vec().as_mut(),
+      compiler.get_instructions().to_vec(),
+      compiler.get_constants().to_vec().as_mut(),
     );
     let result = self.vm.run();
 
@@ -53,9 +66,7 @@ impl Ether {
   }
 
   pub fn execute_file(&mut self, path: &str) -> Result<()> {
-    let source =
-      std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-    self.execute(&source)
+    compile_and_run_file(Path::new(path))
   }
 }
 
@@ -65,19 +76,33 @@ impl Default for Ether {
   }
 }
 
-pub fn compile_and_run(source: &str) -> Result<()> {
-  let mut lexer = lexer::Lexer::new(source);
+pub fn compile_and_run_file(filepath: &Path) -> Result<()> {
+  let source = std::fs::read_to_string(filepath)
+    .map_err(|e| format!("Failed to read file '{}': {}", filepath.display(), e))?;
+
+  compile_and_run(&source, filepath)
+}
+
+pub fn compile_and_run(source: &str, filepath: &Path) -> Result<()> {
+  let mut lexer = lexer::Lexer::new(&source);
   let tokens = lexer.tokenize()?;
 
   let mut parser = parser::Parser::new(tokens);
   let ast = parser.parse()?;
 
+  let mut loader = module::ModuleLoader::new();
+  loader.set_startup_script_dir(filepath);
+
   let mut compiler = compiler::Compiler::new();
+  compiler.set_current_file(filepath.to_path_buf());
+  compiler.set_module_loader(loader);
   compiler.compile(&ast)?;
 
-  let instructions = compiler.get_instructions().to_vec();
-  let constants = compiler.get_constants().to_vec();
-  let mut vm = vm::VM::new(instructions, constants);
+  let mut vm = vm::VM::new(
+    compiler.get_instructions().to_vec(),
+    compiler.get_constants().to_vec(),
+    compiler.get_global_var_names().clone(),
+  );
   vm.run()?;
 
   Ok(())

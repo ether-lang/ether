@@ -2,11 +2,12 @@
 // COMPILER
 // ============================================================================
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::{
   ast::{BinOp, Expr, Pattern, Stmt, UnOp},
   instruction::{Instruction, OpCode},
+  module::ModuleLoader,
   value::{ClassDef, MethodDef, Value},
 };
 
@@ -15,10 +16,14 @@ pub struct Compiler {
   constants: Vec<Value>,
   var_indices: HashMap<String, usize>,
   next_var_index: usize,
-  function_addresses: HashMap<String, usize>,
+  pub function_addresses: HashMap<String, usize>,
   classes: HashMap<String, Rc<ClassDef>>,
   current_class: Option<String>,
-  scope_stack: Vec<HashMap<String, usize>>, // Add this
+  scope_stack: Vec<HashMap<String, usize>>,
+  module_loader: Option<ModuleLoader>,
+  current_file: PathBuf,
+  global_var_names: HashMap<usize, String>,
+  is_in_global_scope: bool,
   is_repl: bool,
 }
 
@@ -33,6 +38,10 @@ impl Compiler {
       classes: HashMap::new(),
       current_class: None,
       scope_stack: Vec::new(),
+      module_loader: None,
+      current_file: PathBuf::from("."),
+      global_var_names: HashMap::new(),
+      is_in_global_scope: true,
       is_repl: false,
     }
   }
@@ -47,8 +56,20 @@ impl Compiler {
       classes: HashMap::new(),
       current_class: None,
       scope_stack: Vec::new(),
+      module_loader: None,
+      current_file: PathBuf::from("."),
+      global_var_names: HashMap::new(),
+      is_in_global_scope: true,
       is_repl: true,
     }
+  }
+
+  pub fn set_module_loader(&mut self, loader: ModuleLoader) {
+    self.module_loader = Some(loader);
+  }
+
+  pub fn set_current_file(&mut self, path: PathBuf) {
+    self.current_file = path;
   }
 
   fn add_constant(&mut self, value: Value) -> usize {
@@ -70,13 +91,39 @@ impl Compiler {
 
   fn get_var_index(&mut self, name: &str) -> usize {
     if let Some(&idx) = self.var_indices.get(name) {
+      println!(
+        "DEBUG get_var_index: '{}' already exists at index {}",
+        name, idx
+      );
       idx
     } else {
       let idx = self.next_var_index;
+      println!(
+        "DEBUG get_var_index: '{}' is NEW, assigning index {}",
+        name, idx
+      );
+      println!(
+        "DEBUG get_var_index: is_in_global_scope = {}",
+        self.is_in_global_scope
+      );
       self.var_indices.insert(name.to_string(), idx);
       self.next_var_index += 1;
+
+      // If we're in global scope, record this as a global variable
+      if self.is_in_global_scope {
+        println!(
+          "DEBUG get_var_index: Recording '{}' as global at index {}",
+          name, idx
+        );
+        self.global_var_names.insert(idx, name.to_string());
+      }
+
       idx
     }
+  }
+
+  pub fn get_global_var_names(&self) -> &HashMap<usize, String> {
+    &self.global_var_names
   }
 
   fn emit(&mut self, opcode: OpCode, arg: i32) {
@@ -93,6 +140,7 @@ impl Compiler {
     // Reset for new scope
     self.var_indices.clear();
     self.next_var_index = 0;
+    self.is_in_global_scope = false; // We're no longer in global scope
   }
 
   fn exit_scope(&mut self) {
@@ -101,6 +149,9 @@ impl Compiler {
       self.var_indices = prev_scope;
       // Recalculate next_var_index
       self.next_var_index = self.var_indices.values().max().map(|v| v + 1).unwrap_or(0);
+
+      // If we're back at top level, we're in global scope
+      self.is_in_global_scope = self.scope_stack.is_empty();
     }
   }
 
@@ -470,6 +521,45 @@ impl Compiler {
         let var_idx = self.get_var_index(name);
         self.emit(OpCode::StoreVar, var_idx as i32);
       }
+      Stmt::Import { path, alias } => {
+        let loader = self
+          .module_loader
+          .as_mut()
+          .ok_or_else(|| "Module loader not initialized".to_string())?;
+
+        let module = loader.load_module(path, &self.current_file)?;
+
+        println!(
+          "DEBUG: Loaded module '{}', exports: {:?}",
+          module.name,
+          module.exports.keys()
+        );
+
+        // Store module as a value
+        let const_idx = self.add_constant(Value::Module(module));
+        self.emit(OpCode::LoadConst, const_idx as i32);
+
+        // Determine the binding name
+        let binding_name = if let Some(alias_name) = alias {
+          alias_name.clone()
+        } else {
+          // Extract module name from path
+          // "std:http" -> "http"
+          // "dir/mod" -> "mod"
+          // "module" -> "module"
+          path
+            .split(&[':', '/'][..])
+            .last()
+            .unwrap_or(path)
+            .to_string()
+        };
+
+        println!("DEBUG: Binding module to variable: {}", binding_name);
+
+        let var_idx = self.get_var_index(&binding_name);
+        println!("DEBUG: Variable index: {}", var_idx);
+        self.emit(OpCode::StoreVar, var_idx as i32);
+      }
       Stmt::Expr(expr) => {
         self.compile_expr(expr)?;
         if !self.is_repl {
@@ -735,45 +825,18 @@ impl Compiler {
         self.emit(OpCode::LoadConst, member_const as i32);
         self.emit(OpCode::GetField, 0);
       }
-      Expr::New { class_name, args } => {
-        let class_info = if let Some(class_def) = self.classes.get(class_name) {
-          let class_rc = Rc::clone(class_def);
-          let init_addr = class_def.find_method("new").map(|m| m.address);
-          Some((class_rc, init_addr))
-        } else {
-          None
-        };
+      Expr::New { class_expr, args } => {
+        // Evaluate the class expression (could be Ident, MemberAccess, etc.)
+        self.compile_expr(class_expr)?;
 
-        if let Some((class_def, init_addr)) = class_info {
-          // Push class
-          let const_idx = self.add_constant(Value::Class(class_def));
-          self.emit(OpCode::LoadConst, const_idx as i32);
-
-          // Create instance (leaves instance on stack)
-          self.emit(OpCode::NewInstance, 0);
-
-          // If constructor exists
-          if let Some(addr) = init_addr {
-            // Duplicate the instance (we need it twice: once for init, once for result)
-            // Add a Dup opcode
-            self.emit(OpCode::Dup, 0);
-
-            // Push arguments
-            for arg in args {
-              self.compile_expr(arg)?;
-            }
-
-            // Call constructor (this consumes the duplicated instance)
-            self.emit(OpCode::Call, addr as i32);
-
-            // Pop constructor's return value
-            self.emit(OpCode::Pop, 0);
-
-            // Original instance is still on stack
-          }
-        } else {
-          return Err(format!("Class '{}' not found", class_name));
+        // Now the class is on the stack
+        // Push arguments
+        for arg in args {
+          self.compile_expr(arg)?;
         }
+
+        // Call NewInstance with the class on stack
+        self.emit(OpCode::NewInstance, args.len() as i32);
       }
       Expr::SelfExpr => {
         let idx = self.get_var_index("self");

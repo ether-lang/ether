@@ -69,6 +69,7 @@ impl Parser {
       TokenType::Let => self.parse_let(),
       TokenType::Def => self.parse_function(),
       TokenType::Class => self.parse_class(),
+      TokenType::Import => self.parse_import(),
       TokenType::Return => self.parse_return(),
       TokenType::If => self.parse_if(),
       TokenType::While => self.parse_while(),
@@ -530,6 +531,35 @@ impl Parser {
     })
   }
 
+  fn parse_import(&mut self) -> Result<Stmt, String> {
+    self.advance(); // consume 'import'
+
+    // Expect a string literal for the module path
+    let path = if let TokenType::StringLit(p) = &self.current().ttype {
+      let path = p.clone();
+      self.advance();
+      path
+    } else {
+      return Err("Expected string literal after 'import'".to_string());
+    };
+
+    // Check for optional 'as' alias
+    let alias = if matches!(self.current().ttype, TokenType::As) {
+      self.advance();
+      if let TokenType::Ident(name) = &self.current().ttype {
+        let alias = name.clone();
+        self.advance();
+        Some(alias)
+      } else {
+        return Err("Expected identifier after 'as'".to_string());
+      }
+    } else {
+      None
+    };
+
+    Ok(Stmt::Import { path, alias })
+  }
+
   fn parse_expression(&mut self) -> Result<Expr, String> {
     self.parse_match()
   }
@@ -966,14 +996,26 @@ impl Parser {
       TokenType::New => {
         self.advance();
 
-        let class_name = if let TokenType::Ident(n) = &self.current().ttype {
-          let name = n.clone();
-          self.advance();
-          name
-        } else {
-          return Err("Expected class name after 'new'".to_string());
-        };
+        // Parse the class reference WITHOUT allowing function calls
+        // We only want Ident or MemberAccess, not MethodCall
+        let mut class_expr = self.parse_primary()?;
 
+        // Handle member access manually (don't use parse_postfix)
+        while matches!(self.current().ttype, TokenType::Dot) {
+          self.advance();
+          if let TokenType::Ident(member) = &self.current().ttype {
+            let member_name = member.clone();
+            self.advance();
+            class_expr = Expr::MemberAccess {
+              object: Box::new(class_expr),
+              member: member_name,
+            };
+          } else {
+            return Err("Expected member name after '.'".to_string());
+          }
+        }
+
+        // Now expect the constructor arguments
         self.expect(|t| matches!(t, TokenType::LParen))?;
 
         let mut args = Vec::new();
@@ -985,7 +1027,10 @@ impl Parser {
         }
 
         self.expect(|t| matches!(t, TokenType::RParen))?;
-        Ok(Expr::New { class_name, args })
+        Ok(Expr::New {
+          class_expr: Box::new(class_expr),
+          args,
+        })
       }
       TokenType::Self_ => {
         self.advance();

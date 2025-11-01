@@ -43,10 +43,15 @@ pub struct VM {
   try_stack: Vec<TryHandler>,
   for_in_stack: Vec<ForInIterator>,
   error: Option<Value>,
+  global_var_names: HashMap<usize, String>,
 }
 
 impl VM {
-  pub fn new(instructions: Vec<Instruction>, constants: Vec<Value>) -> Self {
+  pub fn new(
+    instructions: Vec<Instruction>,
+    constants: Vec<Value>,
+    global_var_names: HashMap<usize, String>,
+  ) -> Self {
     VM {
       instructions,
       constants,
@@ -58,6 +63,7 @@ impl VM {
       try_stack: Vec::new(),
       for_in_stack: Vec::new(),
       error: None,
+      global_var_names,
     }
   }
 
@@ -91,6 +97,18 @@ impl VM {
     self.for_in_stack.clear();
     self.error = None;
     self.pc = 0;
+  }
+
+  pub fn get_global_variables(&self) -> HashMap<String, Value> {
+    let mut globals = HashMap::new();
+
+    for (idx, name) in &self.global_var_names {
+      if *idx < self.variables.len() {
+        globals.insert(name.clone(), self.variables[*idx].clone());
+      }
+    }
+
+    globals
   }
 
   fn get_call_site_pc(&mut self) -> usize {
@@ -227,6 +245,13 @@ impl VM {
 
         if actual_idx < self.variables.len() {
           let val = self.variables[actual_idx].clone();
+          println!(
+            "DEBUG LoadVar: local_idx={}, base_pointer={}, actual_idx={}, value type={}",
+            local_idx,
+            self.base_pointer,
+            actual_idx,
+            val.type_name()
+          );
           self.push(val);
         } else {
           return Err(format!("Undefined variable at index {}", local_idx));
@@ -236,6 +261,14 @@ impl VM {
         let val = self.pop()?;
         let local_idx = instr.arg as usize;
         let actual_idx = self.base_pointer + local_idx;
+
+        println!(
+          "DEBUG StoreVar: local_idx={}, base_pointer={}, actual_idx={}, value type={}",
+          local_idx,
+          self.base_pointer,
+          actual_idx,
+          val.type_name()
+        );
 
         // Grow variables vector if needed
         while self.variables.len() <= actual_idx {
@@ -892,34 +925,82 @@ impl VM {
         self.push(value);
       }
       OpCode::NewInstance => {
+        let arg_count = instr.arg as usize;
+
+        // Pop arguments
+        let mut args = Vec::new();
+        for _ in 0..arg_count {
+          args.push(self.pop()?);
+        }
+        args.reverse();
+
+        // Pop the class
         let class_val = self.pop()?;
-        let _arg_count = instr.arg as usize;
 
         if let Value::Class(class_def) = class_val {
+          // Create instance
           let instance = Instance::new(Rc::clone(&class_def));
           let instance_val = Value::Instance(Rc::new(RefCell::new(instance)));
 
-          // Arguments are already on the stack for constructor
+          // Check if 'new' constructor exists
+          if let Some(init_method) = class_def.find_method("new") {
+            let init_addr = init_method.address;
+
+            // Duplicate instance on stack (one for init, one to return)
+            self.push(instance_val.clone());
+
+            // Push instance as 'self'
+            self.push(instance_val.clone());
+
+            // Push arguments
+            for arg in args {
+              self.push(arg);
+            }
+
+            // Call new
+            let frame = StackFrame {
+              return_addr: self.pc,
+              base_pointer: self.base_pointer,
+              var_count: 0,
+            };
+            self.call_stack.push(frame);
+            self.base_pointer = self.variables.len();
+            self.pc = init_addr - 1;
+          }
+
+          // Push the instance (or it's already there from dup)
           self.push(instance_val);
         } else {
-          return Err("Expected class for instantiation".to_string());
+          return Err(format!(
+            "Expected class for instantiation, got {}",
+            class_val.type_name()
+          ));
         }
       }
       OpCode::GetField => {
         let field_name = self.pop()?;
-        let instance_val = self.pop()?;
+        let object_val = self.pop()?;
 
-        if let (Value::Instance(instance_ref), Value::String(name)) = (instance_val, field_name) {
-          let instance = instance_ref.borrow();
-
-          // Check if it's a field
-          if let Some(value) = instance.get_field(&name) {
-            self.push(value.clone());
-          } else {
-            return Err(format!("Instance has no field '{}'", name));
+        match (object_val, field_name) {
+          (Value::Instance(instance_ref), Value::String(name)) => {
+            let instance = instance_ref.borrow();
+            if let Some(value) = instance.get_field(&name) {
+              self.push(value.clone());
+            } else {
+              return Err(format!("Instance has no field '{}'", name));
+            }
           }
-        } else {
-          return Err("Invalid field access".to_string());
+          (Value::Module(module), Value::String(name)) => {
+            // Try to get exported value
+            if let Some(value) = module.get_export(&name) {
+              self.push(value.clone());
+            } else {
+              return Err(format!("Module '{}' has no export '{}'", module.name, name));
+            }
+          }
+          _ => {
+            return Err("Invalid field access".to_string());
+          }
         }
       }
       OpCode::SetField => {
@@ -963,31 +1044,23 @@ impl VM {
         }
         args.reverse();
 
-        let instance_val = self.pop()?;
+        let target = self.pop()?;
 
-        match instance_val {
+        match target {
           Value::Instance(instance_ref) => {
+            // Instance method call
             if let Value::String(method) = method_name {
               let method_addr = {
                 let instance = instance_ref.borrow();
-
-                if let Some(method_def) = instance.class.find_method(&method) {
-                  Some(method_def.address)
-                } else {
-                  None
-                }
+                instance.class.find_method(&method).map(|m| m.address)
               };
 
               if let Some(addr) = method_addr {
-                // Push instance as self
                 self.push(Value::Instance(instance_ref));
-
-                // Push arguments
                 for arg in args {
                   self.push(arg);
                 }
 
-                // Create stack frame and call the method
                 let frame = StackFrame {
                   return_addr: self.pc,
                   base_pointer: self.base_pointer,
@@ -1003,16 +1076,40 @@ impl VM {
               return Err("Method name must be a string".to_string());
             }
           }
-          Value::Class(class_def) => {
-            // Static method call
-            if let Value::String(method) = method_name {
-              if let Some(static_method) = class_def.static_methods.get(&method) {
-                // Push arguments (no self for static methods)
+          Value::Module(module) => {
+            // Module function call
+            if let Value::String(func_name) = method_name {
+              if let Some(Value::Function(func_def)) = module.exports.get(&func_name) {
                 for arg in args {
                   self.push(arg);
                 }
 
-                // Create stack frame and call the static method
+                let frame = StackFrame {
+                  return_addr: self.pc,
+                  base_pointer: self.base_pointer,
+                  var_count: 0,
+                };
+                self.call_stack.push(frame);
+                self.base_pointer = self.variables.len();
+                self.pc = func_def.address - 1;
+              } else {
+                return Err(format!(
+                  "Module '{}' has no function '{}'",
+                  module.name, func_name
+                ));
+              }
+            } else {
+              return Err("Function name must be a string".to_string());
+            }
+          }
+          Value::Class(class_def) => {
+            // Static method call
+            if let Value::String(method) = method_name {
+              if let Some(static_method) = class_def.static_methods.get(&method) {
+                for arg in args {
+                  self.push(arg);
+                }
+
                 let frame = StackFrame {
                   return_addr: self.pc,
                   base_pointer: self.base_pointer,
@@ -1022,20 +1119,14 @@ impl VM {
                 self.base_pointer = self.variables.len();
                 self.pc = static_method.address - 1;
               } else {
-                return Err(format!(
-                  "Static method '{}' not found on class '{}'",
-                  method, class_def.name
-                ));
+                return Err(format!("Static method '{}' not found", method));
               }
             } else {
               return Err("Method name must be a string".to_string());
             }
           }
           _ => {
-            return Err(format!(
-              "Invalid method call - expected instance or class, got {}",
-              instance_val.type_name()
-            ));
+            return Err(format!("Cannot call method on {}", target.type_name()));
           }
         }
       }

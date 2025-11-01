@@ -5,6 +5,8 @@
 use core::fmt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use crate::module::Module;
+
 #[derive(Debug, Clone)]
 pub struct ClassDef {
   pub name: String,
@@ -20,6 +22,13 @@ pub struct MethodDef {
   pub params: Vec<String>,
   pub address: usize,
   pub is_private: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionDef {
+  pub name: String,
+  pub address: usize,
+  pub module_id: Option<String>, // To identify which module it belongs to
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +120,8 @@ pub enum Value {
   },
   Class(Rc<ClassDef>),
   Instance(Rc<RefCell<Instance>>),
+  Module(Rc<Module>),
+  Function(Rc<FunctionDef>),
   Nil,
 }
 
@@ -128,6 +139,8 @@ impl Value {
       Value::Error { .. } => "Error",
       Value::Instance(_) => "object",
       Value::Class(_) => "class",
+      Value::Module(_) => "module",
+      Value::Function(_) => "function",
       Value::Nil => "nil",
     }
   }
@@ -202,6 +215,8 @@ impl fmt::Display for Value {
       }
       Value::Class(class_def) => write!(f, "[class {}]", class_def.name),
       Value::Instance(instance_ref) => write!(f, "[object {}]", instance_ref.borrow().class.name),
+      Value::Module(module) => write!(f, "[module '{}']", module.name),
+      Value::Function(func_def) => write!(f, "[function {}]", func_def.name),
       Value::Nil => write!(f, "nil"),
     }
   }

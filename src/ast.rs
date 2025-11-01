@@ -75,6 +75,10 @@ pub enum Stmt {
     )>, // (name, params, body, return_type, is_static, is_private)
     fields: Vec<(String, Option<Expr>, bool)>, // (name, default_value, is_private)
   },
+  Import {
+    path: String,
+    alias: Option<String>,
+  },
 }
 
 #[derive(Debug, Clone)]
@@ -125,7 +129,7 @@ pub enum Expr {
     member: String,
   },
   New {
-    class_name: String,
+    class_expr: Box<Expr>,
     args: Vec<Expr>,
   },
   SelfExpr,
