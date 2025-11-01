@@ -1,0 +1,27 @@
+# Math library module
+
+def add(a, b) {
+    return a + b
+}
+
+def multiply(a, b) {
+    return a * b
+}
+
+def square(x) {
+    return multiply(x, x)
+}
+
+# Private helper
+def _internal(x) {
+    return x * 100
+}
+
+let PI = 3.14159
+let _private_const = 999
+
+class Calculator {
+    def add_ten(x) {
+        return x + 10
+    }
+}

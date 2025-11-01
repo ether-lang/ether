@@ -1,0 +1,33 @@
+import "math_lib"
+
+print("Testing function calls:")
+print(math_lib.add(5, 10))
+print(math_lib.multiply(3, 4))
+print(math_lib.square(7))
+
+print("Testing constants:")
+print(math_lib.PI)
+
+print("Testing class import:")
+let calc = new math_lib.Calculator()
+print(calc.add_ten(5))
+
+# With alias
+import "math_lib" as m
+
+print("With alias:")
+print(m.add(100, 200))
+print(m.square(9))
+
+# Expected output:
+# Testing function calls:
+# 15
+# 12
+# 49
+# Testing constants:
+# 3.14159
+# Testing class import:
+# 15
+# With alias:
+# 300
+# 81

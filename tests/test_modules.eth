@@ -1,0 +1,35 @@
+# Test module imports
+
+import "math_lib"
+
+print("Testing module import:")
+let sum = math_lib.add(5, 10)
+print(sum)
+
+let product = math_lib.multiply(3, 4)
+print(product)
+
+let sq = math_lib.square(7)
+print(sq)
+
+print("Constants:")
+print(math_lib.PI)
+print(math_lib.E)
+
+# Test with alias
+import "math_lib" as math
+
+let result = math.add(100, 200)
+print("With alias:")
+print(result)
+
+# Expected output:
+# Testing module import:
+# 15
+# 12
+# 49
+# Constants:
+# 3.14159
+# 2.71828
+# With alias:
+# 300
