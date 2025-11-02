@@ -627,9 +627,9 @@ impl Compiler {
           if let Some(&addr) = self.function_addresses.get(name) {
             self.emit(OpCode::Call, addr as i32);
           } else {
-            return Err(format!("Undefined function: {}", name));
+              return Err(format!("Undefined function: {}", name));
+            }
           }
-        }
       },
       Expr::Index { target, index } => {
         self.compile_expr(target)?;

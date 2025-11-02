@@ -1,0 +1,27 @@
+# Ensure inner variables shadow outer ones but outer remains intact.
+
+let x = 100
+
+def shadow_test() {
+    let x = 10
+    def inner() {
+        let x = 1
+        return x  # should return inner local x = 1
+    }
+    let v = inner()
+    return [v, x]  # v=1, x=10 (inner scope), outer x remains 100
+}
+
+let res = shadow_test()
+print("shadowing results:")
+print(res[0])
+print(res[1])
+print("outer x unchanged:")
+print(x)
+
+# Expected:
+# shadowing results:
+# 1
+# 10
+# outer x unchanged:
+# 100

@@ -1,0 +1,25 @@
+# Ensure closures keep captured state alive after framestack return.
+# This test simply returns a closure that intentionally references a list
+# created in the outer scope; if closure capture is broken, the list value may be lost.
+
+def make_keeper() {
+    let big = [1,2,3,4,5]
+    def get_sum() {
+        let s = 0
+        let i = 0
+        while i < 5 {
+            s = s + big[i]
+            i = i + 1
+        }
+        return s
+    }
+    return get_sum
+}
+
+let keeper = make_keeper()
+print("keeper sum:")
+print(keeper())
+
+# Expected:
+# keeper sum:
+# 15
