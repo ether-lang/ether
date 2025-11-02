@@ -38,3 +38,10 @@ let dog = new Dog("Buddy", "Golden Retriever")
 dog.introduce()
 dog.speak()
 dog.show_breed()
+
+# Expected output:
+# I am
+# Buddy
+# Woof!
+# Breed:
+# Golden Retriever

@@ -24,3 +24,10 @@ p.x = 10
 p.y = 20
 p.display()
 p.distance_from_origin()
+
+# Expected output:
+# Point:
+# 10
+# 20
+# Distance squared:
+# 500

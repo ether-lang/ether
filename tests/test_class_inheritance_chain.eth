@@ -30,3 +30,11 @@ let dog = new Dog("Buddy")
 dog.eat()
 dog.feed_young()
 dog.bark()
+
+# Expected output:
+# Buddy
+# is eating
+# Buddy
+# feeds its young
+# Buddy
+# says: Woof!

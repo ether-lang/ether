@@ -28,3 +28,9 @@ let donald = new Duck("Donald")
 donald.introduce()
 donald.fly()
 donald.swim()
+
+# Expected output:
+# I am a duck named
+# Donald
+# I can fly!
+# I can swim!

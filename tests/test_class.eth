@@ -12,3 +12,6 @@ class Animal {
 
 let dog = new Animal("Buddy")
 dog.speak()
+
+# Expected output:
+# Buddy

@@ -18,6 +18,7 @@ def _internal(x) {
 }
 
 let PI = 3.14159
+let E =  2.71828
 let _private_const = 999
 
 class Calculator {

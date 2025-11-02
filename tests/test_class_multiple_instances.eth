@@ -30,3 +30,11 @@ c1.get_count()
 
 print("Counter 2:")
 c2.get_count()
+
+# Expected output:
+# Counter 1:
+# Count:
+# 3
+# Counter 2:
+# Count:
+# 1

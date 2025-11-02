@@ -31,3 +31,9 @@ b = b.set_x(10)
 b = b.set_y(20)
 b = b.build()
 print(b)
+
+# Expected output:
+# Built with:
+# 10
+# 20
+# [object Builder]

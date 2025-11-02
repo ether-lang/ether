@@ -20,3 +20,9 @@ print(pi_value)
 let max_value = MathUtils.max(10, 20)
 print("Max of 10 and 20:")
 print(max_value)
+
+# Expected output:
+# PI:
+# 3.14159
+# Max of 10 and 20:
+# 20

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::compiler::Compiler;
+use crate::instruction::Instruction;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::value::{FunctionDef, Value};
@@ -14,6 +15,8 @@ pub struct Module {
   pub name: String,
   pub path: PathBuf,
   pub exports: HashMap<String, Value>,
+  pub instructions: Vec<Instruction>,
+  pub constants: Vec<Value>,
 }
 
 impl Module {
@@ -22,6 +25,8 @@ impl Module {
       name,
       path,
       exports: HashMap::new(),
+      instructions: Vec::new(),
+      constants: Vec::new(),
     }
   }
 
@@ -194,13 +199,6 @@ impl ModuleLoader {
     let mut parser = Parser::new(tokens);
     let ast = parser.parse()?;
 
-    // Create module
-    let module_name = resolved_path
-      .file_stem()
-      .and_then(|s| s.to_str())
-      .unwrap_or("unknown")
-      .to_string();
-
     // Compile the module
     let mut module_compiler = Compiler::new();
     module_compiler.set_current_file(resolved_path.clone());
@@ -209,7 +207,17 @@ impl ModuleLoader {
     module_compiler.compile(&ast)?;
 
     // Create module
+    let module_name = resolved_path
+      .file_stem()
+      .and_then(|s| s.to_str())
+      .unwrap_or("unknown")
+      .to_string();
+
     let mut module = Module::new(module_name, resolved_path.clone());
+
+    // Store the bytecode and constants
+    module.instructions = module_compiler.get_instructions().to_vec();
+    module.constants = module_compiler.get_constants().to_vec();
 
     // Extract public functions
     for (name, addr) in &module_compiler.function_addresses {
@@ -219,8 +227,8 @@ impl ModuleLoader {
     }
 
     // Execute module to get variable values
-    let instructions = module_compiler.get_instructions().to_vec();
-    let constants = module_compiler.get_constants().to_vec();
+    let instructions = module.instructions.clone();
+    let constants = module.constants.clone();
     let global_var_names = module_compiler.get_global_var_names().clone();
 
     let mut vm = VM::new(instructions, constants, global_var_names);
@@ -233,11 +241,23 @@ impl ModuleLoader {
       }
     }
 
-    // Store module with its bytecode (needed for function calls)
-    // We need to keep the instructions and constants accessible
-    // So we'll need to store them in the module
+    // Get all public variables from VM
+    for (name, value) in vm.get_global_variables() {
+      if Module::is_public(&name) {
+        // If it's a class, attach the module's bytecode to it
+        let value_to_insert = if let Value::Class(class_rc) = value {
+          // Create a new ClassDef with module context
+          let mut new_class = (*class_rc).clone();
+          new_class.source_module = Some((module.instructions.clone(), module.constants.clone()));
+          Value::Class(Rc::new(new_class))
+        } else {
+          value
+        };
 
-    // Cache the module
+        module.exports.insert(name, value_to_insert);
+      }
+    }
+
     let module_rc = Rc::new(module);
     self.loaded_modules.insert(cache_key, Rc::clone(&module_rc));
 

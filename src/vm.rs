@@ -481,7 +481,22 @@ impl VM {
           // Restore program counter
           self.pc = frame.return_addr;
 
-          // Push return value
+          // Check if this was a constructor call (marker + instance on stack)
+          if self.stack.len() >= 2 {
+            let potential_instance = self.stack[self.stack.len() - 1].clone();
+            let potential_marker = self.stack[self.stack.len() - 2].clone();
+
+            if matches!(potential_marker, Value::String(ref s) if s == "__NEWINSTANCE_MARKER__") {
+              // This was a constructor! Pop marker and instance, then push instance
+              self.pop()?; // Pop instance
+              self.pop()?; // Pop marker
+              self.push(potential_instance); // Push instance back
+              // Don't push return_val - we want the instance instead
+              return Ok(());
+            }
+          }
+
+          // Normal return - push return value
           self.push(return_val);
         } else {
           // Returning from main/top-level
@@ -930,8 +945,10 @@ impl VM {
           if let Some(init_method) = class_def.find_method("new") {
             let init_addr = init_method.address;
 
-            // Duplicate instance on stack (one for init, one to return)
-            self.push(instance_val.clone());
+            // Push a marker value that we'll use to detect constructor return
+            // This is a hack but it works
+            self.push(Value::String("__NEWINSTANCE_MARKER__".to_string()));
+            self.push(instance_val.clone()); // The instance we'll return
 
             // Push instance as 'self'
             self.push(instance_val.clone());
@@ -950,10 +967,10 @@ impl VM {
             self.call_stack.push(frame);
             self.base_pointer = self.variables.len();
             self.pc = init_addr - 1;
+          } else {
+            // No constructor, just push the instance
+            self.push(instance_val);
           }
-
-          // Push the instance (or it's already there from dup)
-          self.push(instance_val);
         } else {
           return Err(format!(
             "Expected class for instantiation, got {}",
@@ -1026,25 +1043,77 @@ impl VM {
           Value::Instance(instance_ref) => {
             // Instance method call
             if let Value::String(method) = method_name {
-              let method_addr = {
+              let (method_addr, has_module_context) = {
                 let instance = instance_ref.borrow();
-                instance.class.find_method(&method).map(|m| m.address)
+                let method_def = instance.class.find_method(&method);
+                let has_context = instance.class.source_module.is_some();
+                (method_def.map(|m| m.address), has_context)
               };
 
               if let Some(addr) = method_addr {
-                self.push(Value::Instance(instance_ref));
-                for arg in args {
-                  self.push(arg);
-                }
+                // Check if this class came from a module
+                if has_module_context {
+                  // Execute in module context
+                  let (instructions, constants) = {
+                    let instance = instance_ref.borrow();
+                    instance.class.source_module.clone().unwrap()
+                  };
 
-                let frame = StackFrame {
-                  return_addr: self.pc,
-                  base_pointer: self.base_pointer,
-                  var_count: 0,
-                };
-                self.call_stack.push(frame);
-                self.base_pointer = self.variables.len();
-                self.pc = addr - 1;
+                  let mut module_vm = VM::new(instructions, constants, HashMap::new());
+
+                  // Push self (the instance)
+                  module_vm
+                    .stack
+                    .push(Value::Instance(Rc::clone(&instance_ref)));
+
+                  // Push arguments in reverse
+                  for arg in args.iter().rev() {
+                    module_vm.stack.push(arg.clone());
+                  }
+
+                  module_vm.pc = addr;
+
+                  let mut return_value = Value::Nil;
+
+                  while module_vm.pc < module_vm.instructions.len() {
+                    let instr = module_vm.instructions[module_vm.pc].clone();
+
+                    if matches!(instr.opcode, OpCode::Return) {
+                      return_value = module_vm.stack.last().cloned().unwrap_or(Value::Nil);
+                      match module_vm.execute(instr) {
+                        Ok(_) => break,
+                        Err(e) => return Err(format!("Module method error: {}", e)),
+                      }
+                    } else {
+                      match module_vm.execute(instr) {
+                        Ok(_) => {
+                          if module_vm.pc >= module_vm.instructions.len() {
+                            break;
+                          }
+                          module_vm.pc += 1;
+                        }
+                        Err(e) => return Err(format!("Module method error: {}", e)),
+                      }
+                    }
+                  }
+
+                  self.push(return_value);
+                } else {
+                  // Regular instance method call (original code)
+                  self.push(Value::Instance(instance_ref));
+                  for arg in args {
+                    self.push(arg);
+                  }
+
+                  let frame = StackFrame {
+                    return_addr: self.pc,
+                    base_pointer: self.base_pointer,
+                    var_count: 0,
+                  };
+                  self.call_stack.push(frame);
+                  self.base_pointer = self.variables.len();
+                  self.pc = addr - 1;
+                }
               } else {
                 return Err(format!("Method '{}' not found", method));
               }
@@ -1056,18 +1125,55 @@ impl VM {
             // Module function call
             if let Value::String(func_name) = method_name {
               if let Some(Value::Function(func_def)) = module.exports.get(&func_name) {
-                for arg in args {
-                  self.push(arg);
+                // Create a new VM with the module's bytecode
+                let mut module_vm = VM::new(
+                  module.instructions.clone(),
+                  module.constants.clone(),
+                  HashMap::new(),
+                );
+
+                // Push arguments in reverse order onto the stack
+                for arg in args.iter().rev() {
+                  module_vm.stack.push(arg.clone());
                 }
 
-                let frame = StackFrame {
-                  return_addr: self.pc,
-                  base_pointer: self.base_pointer,
-                  var_count: 0,
-                };
-                self.call_stack.push(frame);
-                self.base_pointer = self.variables.len();
-                self.pc = func_def.address - 1;
+                // Start execution at the function's address
+                module_vm.pc = func_def.address;
+
+                let mut return_value = Value::Nil;
+
+                // Execute instructions until we return or halt
+                while module_vm.pc < module_vm.instructions.len() {
+                  let instr = module_vm.instructions[module_vm.pc].clone();
+
+                  // Check if this is a Return instruction - capture value before executing
+                  if matches!(instr.opcode, OpCode::Return) {
+                    // The return value should be on top of the stack
+                    return_value = module_vm.stack.last().cloned().unwrap_or(Value::Nil);
+
+                    // Now execute the return (which will pop it and set pc)
+                    match module_vm.execute(instr) {
+                      Ok(_) => break,
+                      Err(e) => return Err(format!("Module function error: {}", e)),
+                    }
+                  } else {
+                    match module_vm.execute(instr) {
+                      Ok(_) => {
+                        // Check if we've finished
+                        if module_vm.pc >= module_vm.instructions.len() {
+                          break;
+                        }
+                        module_vm.pc += 1;
+                      }
+                      Err(e) => {
+                        return Err(format!("Module function error: {}", e));
+                      }
+                    }
+                  }
+                }
+
+                // Push the captured return value
+                self.push(return_value);
               } else {
                 return Err(format!(
                   "Module '{}' has no function '{}'",

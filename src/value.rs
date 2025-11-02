@@ -5,7 +5,7 @@
 use core::fmt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::module::Module;
+use crate::{instruction::Instruction, module::Module};
 
 #[derive(Debug, Clone)]
 pub struct ClassDef {
@@ -14,6 +14,7 @@ pub struct ClassDef {
   pub methods: HashMap<String, MethodDef>,
   pub static_methods: HashMap<String, MethodDef>,
   pub fields: Vec<(String, Option<Value>, bool)>, // (name, default, is_private)
+  pub source_module: Option<(Vec<Instruction>, Vec<Value>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +46,7 @@ impl ClassDef {
       methods: HashMap::new(),
       static_methods: HashMap::new(),
       fields: Vec::new(),
+      source_module: None,
     }
   }
 

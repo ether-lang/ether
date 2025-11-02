@@ -26,3 +26,11 @@ print(product)
 let squared = calc.square(9)
 print("9 * 9 =")
 print(squared)
+
+# Expected output:
+# 5 + 3 =
+# 8
+# 4 * 7 =
+# 28
+# 9 * 9 =
+# 81

@@ -22,3 +22,15 @@ dog.speak()
 
 let cat = new Animal("Whiskers", 3)
 cat.speak()
+
+# Expected output:
+# My name is
+# Buddy
+# I am
+# 5
+# years old
+# My name is
+# Whiskers
+# I am
+# 3
+# years old

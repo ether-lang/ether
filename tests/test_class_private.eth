@@ -34,3 +34,9 @@ account.get_balance()
 
 # This should fail if called externally:
 # account._validate(10)
+
+# Expected output:
+# Deposited:
+# 50
+# Balance:
+# 150

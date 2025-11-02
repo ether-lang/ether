@@ -7,3 +7,6 @@ def test(n: number) -> number {
 
 let result = test(5)
 print(result)
+
+# Expected output:
+# 1

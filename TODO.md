@@ -7,3 +7,7 @@
 - Add new AI/ML primitives
 - Enhance the REPL experience. Right now, it doesn't return correct result of expressions to the user or support complex statements such as if, while, and function declarations etc.
 - Write comprehensive language documentation in the `docs` directory.
+
+
+test_class_inheritance
+test_class_super

@@ -32,3 +32,11 @@ let student = new Student("Bob")
 student.add_grade(95)
 student.set_info("email", "bob@example.com")
 student.display()
+
+# Expected output:
+# Student:
+# Bob
+# Grades:
+# [95]
+# Info:
+# {email: bob@example.com}

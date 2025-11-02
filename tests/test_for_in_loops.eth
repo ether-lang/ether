@@ -13,3 +13,18 @@ let data = {"x": 10, "y": 20}
 for pair in data {
     print(pair)
 }
+
+# Expected output:
+# Iterating over list:
+# 1
+# 2
+# 3
+# 4
+# 5
+# Iterating over range:
+# 0
+# 1
+# 2
+# Iterating over map:
+# [x, 10]
+# [y, 20]

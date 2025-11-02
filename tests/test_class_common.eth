@@ -33,3 +33,7 @@ class DogCat extends Dog, Cat {
 let pet = new Dog("Buddy")
 pet.speak()  # Prints "Woof!"
 print(pet.name)  # Prints "Buddy"
+
+# Expected output:
+# Woof!
+# Buddy

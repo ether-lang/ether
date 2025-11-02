@@ -31,3 +31,11 @@ person.display()
 person.set_age(25)
 person.set_city("Lagos")
 person.display()
+
+# Expected output:
+# Alice
+# 0
+# Unknown
+# Alice
+# 25
+# Lagos

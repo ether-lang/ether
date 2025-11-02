@@ -996,11 +996,16 @@ impl Parser {
       TokenType::New => {
         self.advance();
 
-        // Parse the class reference WITHOUT allowing function calls
-        // We only want Ident or MemberAccess, not MethodCall
-        let mut class_expr = self.parse_primary()?;
+        // Parse the class reference - either Ident or module.Class chain
+        let mut class_expr = if let TokenType::Ident(name) = &self.current().ttype {
+          let class_name = name.clone();
+          self.advance();
+          Expr::Ident(class_name)
+        } else {
+          return Err("Expected class name after 'new'".to_string());
+        };
 
-        // Handle member access manually (don't use parse_postfix)
+        // Handle member access for module.Class pattern
         while matches!(self.current().ttype, TokenType::Dot) {
           self.advance();
           if let TokenType::Ident(member) = &self.current().ttype {

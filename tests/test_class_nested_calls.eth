@@ -17,3 +17,7 @@ let m = new Math()
 let result = m.quadruple(5)
 print("Quadruple of 5:")
 print(result)
+
+# Expected output:
+# Quadruple of 5:
+# 20
