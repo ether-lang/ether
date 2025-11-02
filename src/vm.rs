@@ -487,31 +487,6 @@ impl VM {
         // Jump to function
         self.pc = instr.arg as usize - 1;
       }
-      OpCode::CallDirect => {
-        let value = self.pop()?;
-
-        match value {
-          Value::Function(function) => {
-            // Save current frame info
-            let frame = StackFrame {
-              return_addr: self.pc,
-              base_pointer: self.base_pointer,
-              var_count: 0, // Will be set by the callee if needed
-              is_constructor: false,
-              constructor_instance: None,
-            };
-
-            self.call_stack.push(frame);
-
-            // Set new base pointer to current variable count
-            self.base_pointer = self.variables.len();
-
-            // Jump to function directly
-            self.pc = function.address - 1;
-          }
-          _ => return Err("Cannot call non-function".to_string()),
-        }
-      }
       OpCode::Return => {
         let return_val = self.pop().unwrap_or(Value::Nil);
 
