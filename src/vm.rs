@@ -15,6 +15,8 @@ struct StackFrame {
   return_addr: usize,
   base_pointer: usize, // Where this frame's variables start in the variables vector
   var_count: usize,    // Number of variables in this frame
+  is_constructor: bool,
+  constructor_instance: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +121,8 @@ impl VM {
         return_addr: 0,
         base_pointer: 0,
         var_count: 0,
+        is_constructor: false,
+        constructor_instance: None,
       }))
       .unwrap()
       .base_pointer
@@ -457,6 +461,8 @@ impl VM {
           return_addr: self.pc,
           base_pointer: self.base_pointer,
           var_count: 0, // Will be set by the callee if needed
+          is_constructor: false,
+          constructor_instance: None,
         };
 
         self.call_stack.push(frame);
@@ -481,23 +487,17 @@ impl VM {
           // Restore program counter
           self.pc = frame.return_addr;
 
-          // Check if this was a constructor call (marker + instance on stack)
-          if self.stack.len() >= 2 {
-            let potential_instance = self.stack[self.stack.len() - 1].clone();
-            let potential_marker = self.stack[self.stack.len() - 2].clone();
-
-            if matches!(potential_marker, Value::String(ref s) if s == "__NEWINSTANCE_MARKER__") {
-              // This was a constructor! Pop marker and instance, then push instance
-              self.pop()?; // Pop instance
-              self.pop()?; // Pop marker
-              self.push(potential_instance); // Push instance back
-              // Don't push return_val - we want the instance instead
-              return Ok(());
+          // If this was a constructor, push the instance instead of return value
+          if frame.is_constructor {
+            if let Some(instance) = frame.constructor_instance {
+              self.push(instance);
+            } else {
+              self.push(Value::Nil);
             }
+          } else {
+            // Normal return - push return value
+            self.push(return_val);
           }
-
-          // Normal return - push return value
-          self.push(return_val);
         } else {
           // Returning from main/top-level
           self.pc = self.instructions.len();
@@ -945,28 +945,70 @@ impl VM {
           if let Some(init_method) = class_def.find_method("new") {
             let init_addr = init_method.address;
 
-            // Push a marker value that we'll use to detect constructor return
-            // This is a hack but it works
-            self.push(Value::String("__NEWINSTANCE_MARKER__".to_string()));
-            self.push(instance_val.clone()); // The instance we'll return
+            // Check if this class has module context
+            let has_module_context = class_def.source_module.is_some();
 
-            // Push instance as 'self'
-            self.push(instance_val.clone());
+            if has_module_context {
+              // Execute constructor in module context
+              let (instructions, constants) = class_def.source_module.clone().unwrap();
+              let mut module_vm = VM::new(instructions, constants, HashMap::new());
 
-            // Push arguments
-            for arg in args {
-              self.push(arg);
+              // Push instance as self
+              module_vm.stack.push(instance_val.clone());
+
+              // Push arguments in reverse
+              for arg in args.iter().rev() {
+                module_vm.stack.push(arg.clone());
+              }
+
+              module_vm.pc = init_addr;
+
+              // Execute until return
+              while module_vm.pc < module_vm.instructions.len() {
+                let instr = module_vm.instructions[module_vm.pc].clone();
+
+                if matches!(instr.opcode, OpCode::Return) {
+                  match module_vm.execute(instr) {
+                    Ok(_) => break,
+                    Err(e) => return Err(format!("Constructor error: {}", e)),
+                  }
+                } else {
+                  match module_vm.execute(instr) {
+                    Ok(_) => {
+                      if module_vm.pc >= module_vm.instructions.len() {
+                        break;
+                      }
+                      module_vm.pc += 1;
+                    }
+                    Err(e) => return Err(format!("Constructor error: {}", e)),
+                  }
+                }
+              }
+
+              // Push the instance
+              self.push(instance_val);
+            } else {
+              // Regular (non-module) constructor call
+              // Push instance as 'self'
+              self.push(instance_val.clone());
+
+              // Push arguments
+              for arg in args {
+                self.push(arg);
+              }
+
+              // Call constructor with special flag
+              let frame = StackFrame {
+                return_addr: self.pc,
+                base_pointer: self.base_pointer,
+                var_count: 0,
+                is_constructor: true, // Mark as constructor
+                constructor_instance: Some(instance_val.clone()), // Store instance
+              };
+              self.call_stack.push(frame);
+              self.base_pointer = self.variables.len();
+              self.pc = init_addr - 1;
             }
-
-            // Call new
-            let frame = StackFrame {
-              return_addr: self.pc,
-              base_pointer: self.base_pointer,
-              var_count: 0,
-            };
-            self.call_stack.push(frame);
-            self.base_pointer = self.variables.len();
-            self.pc = init_addr - 1;
           } else {
             // No constructor, just push the instance
             self.push(instance_val);
@@ -1109,6 +1151,8 @@ impl VM {
                     return_addr: self.pc,
                     base_pointer: self.base_pointer,
                     var_count: 0,
+                    is_constructor: false,
+                    constructor_instance: None,
                   };
                   self.call_stack.push(frame);
                   self.base_pointer = self.variables.len();
@@ -1196,6 +1240,8 @@ impl VM {
                   return_addr: self.pc,
                   base_pointer: self.base_pointer,
                   var_count: 0,
+                  is_constructor: false,
+                  constructor_instance: None,
                 };
                 self.call_stack.push(frame);
                 self.base_pointer = self.variables.len();
@@ -1237,7 +1283,7 @@ impl VM {
                 for parent in &instance.class.parents {
                   if let Some(m) = parent.find_method(method) {
                     addr = Some(m.address);
-                    break; // Use first match (C3 linearization)
+                    break;
                   }
                 }
 
@@ -1245,16 +1291,25 @@ impl VM {
               };
 
               if let Some(addr) = method_addr {
-                self.push(instance_val);
+                self.push(instance_val.clone());
                 for arg in args {
                   self.push(arg);
                 }
 
-                // Create stack frame and call super method
+                // Create stack frame
+                // Check if this is a super() call in a constructor (method name is "new")
+                let is_super_constructor = method == "new";
+
                 let frame = StackFrame {
                   return_addr: self.pc,
                   base_pointer: self.base_pointer,
                   var_count: 0,
+                  is_constructor: is_super_constructor,
+                  constructor_instance: if is_super_constructor {
+                    Some(instance_val.clone())
+                  } else {
+                    None
+                  },
                 };
                 self.call_stack.push(frame);
                 self.base_pointer = self.variables.len();
