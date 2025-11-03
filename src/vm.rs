@@ -251,7 +251,21 @@ impl VM {
           let val = self.variables[actual_idx].clone();
           self.push(val);
         } else {
-          return Err(format!("Undefined variable at index {}", local_idx));
+          // Variable not found in current scope, search call stack
+          // This enables simple closures
+          let mut found = false;
+          for frame in self.call_stack.iter().rev() {
+            let frame_idx = frame.base_pointer + local_idx;
+            if frame_idx < self.variables.len() {
+              self.push(self.variables[frame_idx].clone());
+              found = true;
+              break;
+            }
+          }
+
+          if !found {
+            return Err(format!("Undefined variable at index {}", local_idx));
+          }
         }
       }
       OpCode::StoreVar => {
