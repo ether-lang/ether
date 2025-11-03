@@ -1,0 +1,20 @@
+# Deeply nested closures capturing variables from multiple levels
+
+def a(x) {
+    def b(y) {
+        def c(z) {
+            return x + y + z
+        }
+        return c
+    }
+    return b
+}
+
+let fn_b = a(1)    # fn_b is b with x=1
+let fn_c = fn_b(2) # fn_c is c with x=1,y=2
+print("nested closure result:")
+print(fn_c(3))
+
+# Expected:
+# nested closure result:
+# 6

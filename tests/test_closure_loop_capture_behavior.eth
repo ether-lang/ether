@@ -1,0 +1,28 @@
+# Test for the loop-closure capture pitfall (common across languages).
+# We create closures inside a loop; they should each capture the loop variable value as of that iteration.
+
+def make_funcs_loop() {
+    let result = []
+    let i = 0
+    while i < 3 {
+        # create a closure that returns the current i
+        def f() {
+            return i
+        }
+        result = result + [f]  # append f to result
+        i = i + 1
+    }
+    return result
+}
+
+let funcs = make_funcs_loop()
+print("loop captures:")
+print(funcs[0]())
+print(funcs[1]())
+print(funcs[2]())
+
+# Expected (desired correct behavior):
+# loop captures:
+# 0
+# 1
+# 2

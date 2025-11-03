@@ -1,0 +1,30 @@
+# Store closures in lists and maps and call them later
+
+def make_funcs() {
+    let fs = []
+    def f1() { return 1 }
+    def f2() { return 2 }
+    fs = [f1, f2]
+    let m = { "a": f1, "b": f2 }
+    return [fs, m]
+}
+
+let container = make_funcs()
+let fs = container[0]
+let m = container[1]
+
+print("list stored closure:")
+print(fs[0]())
+print(fs[1]())
+
+print("map stored closure:")
+print(m["a"]())
+print(m["b"]())
+
+# Expected:
+# list stored closure:
+# 1
+# 2
+# map stored closure:
+# 1
+# 2

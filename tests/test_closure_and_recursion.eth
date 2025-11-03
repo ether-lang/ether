@@ -1,0 +1,23 @@
+# Use a closure that returns another closure which uses recursion via a named outer def.
+# This verifies closures can refer to named functions in outer scopes.
+
+def fact_maker() {
+    def fact(n) {
+        if n <= 1 {
+            return 1
+        }
+        return n * fact(n - 1)
+    }
+    def call_fact(x) {
+        return fact(x)
+    }
+    return call_fact
+}
+
+let f = fact_maker()
+print("factorial 5:")
+print(f(5))
+
+# Expected:
+# factorial 5:
+# 120
