@@ -46,6 +46,7 @@ impl Module {
         name: name.clone(),
         address: addr,
         module_id: Some(self.name.clone()),
+        upvalue_count: 0,
       };
       // Store as an exportable value
       self
@@ -229,9 +230,8 @@ impl ModuleLoader {
     // Execute module to get variable values
     let instructions = module.instructions.clone();
     let constants = module.constants.clone();
-    let global_var_names = module_compiler.get_global_var_names().clone();
 
-    let mut vm = VM::new(instructions, constants, global_var_names);
+    let mut vm = VM::new(instructions, constants, HashMap::new());
     vm.run()?;
 
     // Get all public variables from VM

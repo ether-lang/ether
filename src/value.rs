@@ -30,6 +30,13 @@ pub struct FunctionDef {
   pub name: String,
   pub address: usize,
   pub module_id: Option<String>, // To identify which module it belongs to
+  pub upvalue_count: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct Closure {
+  pub function: Rc<FunctionDef>,
+  pub upvalues: Rc<RefCell<Vec<Value>>>, // The captured values
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +131,7 @@ pub enum Value {
   Instance(Rc<RefCell<Instance>>),
   Module(Rc<Module>),
   Function(Rc<FunctionDef>),
+  Closure(Rc<Closure>),
   Nil,
 }
 
@@ -143,6 +151,7 @@ impl Value {
       Value::Class(_) => "class",
       Value::Module(_) => "module",
       Value::Function(_) => "function",
+      Value::Closure(_) => "#function",
       Value::Nil => "nil",
     }
   }
@@ -219,6 +228,7 @@ impl fmt::Display for Value {
       Value::Instance(instance_ref) => write!(f, "[object {}]", instance_ref.borrow().class.name),
       Value::Module(module) => write!(f, "[module '{}']", module.name),
       Value::Function(func_def) => write!(f, "[function {}]", func_def.name),
+      Value::Closure(closure) => write!(f, "[#function {}]", closure.function.name),
       Value::Nil => write!(f, "nil"),
     }
   }

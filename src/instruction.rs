@@ -9,8 +9,12 @@ use core::fmt;
 pub enum OpCode {
   Nil,
   LoadConst,
-  LoadVar,
-  StoreVar,
+  LoadLocal,
+  StoreLocal,
+  LoadUpvalue,
+  StoreUpvalue,
+  LoadGlobal,
+  StoreGlobal,
   Add,
   Sub,
   Mul,
@@ -66,6 +70,8 @@ pub enum OpCode {
   CallMethod,
   LoadSelf,
   CallSuper,
+  MakeClosure,
+  CallClosure,
 }
 
 impl fmt::Display for OpCode {
@@ -73,8 +79,12 @@ impl fmt::Display for OpCode {
     match self {
       OpCode::Nil => write!(f, "nil"),
       OpCode::LoadConst => write!(f, "load_const"),
-      OpCode::LoadVar => write!(f, "load_var"),
-      OpCode::StoreVar => write!(f, "store_var"),
+      OpCode::LoadLocal => write!(f, "load_local"),
+      OpCode::StoreLocal => write!(f, "store_local"),
+      OpCode::LoadUpvalue => write!(f, "load_upvalue"),
+      OpCode::StoreUpvalue => write!(f, "store_upvalue"),
+      OpCode::LoadGlobal => write!(f, "load_global"),
+      OpCode::StoreGlobal => write!(f, "store_global"),
       OpCode::Add => write!(f, "add"),
       OpCode::Sub => write!(f, "sub"),
       OpCode::Mul => write!(f, "mul"),
@@ -130,6 +140,8 @@ impl fmt::Display for OpCode {
       OpCode::CallMethod => write!(f, "call_method"),
       OpCode::LoadSelf => write!(f, "load_self"),
       OpCode::CallSuper => write!(f, "call_super"),
+      OpCode::MakeClosure => write!(f, "make_closure"),
+      OpCode::CallClosure => write!(f, "call_closure"),
     }
   }
 }

@@ -142,6 +142,10 @@ pub enum Expr {
     method: String,
     args: Vec<Expr>,
   },
+  CallExpr {
+    callee: Box<Expr>,
+    args: Vec<Expr>,
+  },
 }
 
 #[derive(Debug, Clone)]

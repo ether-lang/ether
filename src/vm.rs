@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
   instruction::{Instruction, OpCode},
-  value::{Instance, Value},
+  value::{Closure, Instance, Value},
 };
 
 #[derive(Debug, Clone)]
@@ -31,21 +31,24 @@ struct ForInIterator {
   items: Vec<Value>,
   index: usize,
   var_idx: usize,
-  base_pointer: usize, // Add this field
+  base_pointer: usize,
+  is_local: bool,
 }
 
 pub struct VM {
   instructions: Vec<Instruction>,
   constants: Vec<Value>,
   pub stack: Vec<Value>,
-  variables: Vec<Value>,
+  locals: Vec<Value>,
+  globals: HashMap<usize, Value>,
+  global_names: HashMap<usize, String>,
+  upvalues: Rc<RefCell<Vec<Value>>>,
   pc: usize,
   call_stack: Vec<StackFrame>,
   base_pointer: usize,
   try_stack: Vec<TryHandler>,
   for_in_stack: Vec<ForInIterator>,
   error: Option<Value>,
-  global_var_names: HashMap<usize, String>,
 }
 
 impl VM {
@@ -58,14 +61,16 @@ impl VM {
       instructions,
       constants,
       stack: Vec::with_capacity(256),
-      variables: Vec::with_capacity(256),
+      locals: Vec::with_capacity(256),
+      globals: HashMap::new(),
+      global_names: global_var_names,
       pc: 0,
       call_stack: Vec::new(),
       base_pointer: 0,
       try_stack: Vec::new(),
       for_in_stack: Vec::new(),
       error: None,
-      global_var_names,
+      upvalues: Rc::new(RefCell::new(vec![])),
     }
   }
 
@@ -94,23 +99,26 @@ impl VM {
     self.instructions = instructions;
     self.constants.append(constants);
     self.stack.clear();
+    self.locals.clear();
+    self.globals.clear();
     self.call_stack.clear();
     self.try_stack.clear();
     self.for_in_stack.clear();
     self.error = None;
     self.pc = 0;
+    self.upvalues.take().clear();
   }
 
   pub fn get_global_variables(&self) -> HashMap<String, Value> {
-    let mut globals = HashMap::new();
+    let mut result = HashMap::new();
 
-    for (idx, name) in &self.global_var_names {
-      if *idx < self.variables.len() {
-        globals.insert(name.clone(), self.variables[*idx].clone());
+    for (idx, value) in &self.globals {
+      if let Some(name) = self.global_names.get(idx) {
+        result.insert(name.clone(), value.clone());
       }
     }
 
-    globals
+    result
   }
 
   fn get_call_site_pc(&mut self) -> usize {
@@ -243,41 +251,62 @@ impl VM {
         let val = self.constants[instr.arg as usize].clone();
         self.push(val);
       }
-      OpCode::LoadVar => {
+      OpCode::LoadLocal => {
         let local_idx = instr.arg as usize;
         let actual_idx = self.base_pointer + local_idx;
 
-        if actual_idx < self.variables.len() {
-          let val = self.variables[actual_idx].clone();
+        if actual_idx < self.locals.len() {
+          let val = self.locals[actual_idx].clone();
           self.push(val);
         } else {
-          // Variable not found in current scope, search call stack
-          // This enables simple closures
-          let mut found = false;
-          for frame in self.call_stack.iter().rev() {
-            let frame_idx = frame.base_pointer + local_idx;
-            if frame_idx < self.variables.len() {
-              self.push(self.variables[frame_idx].clone());
-              found = true;
-              break;
-            }
-          }
-
-          if !found {
-            return Err(format!("Undefined variable at index {}", local_idx));
-          }
+          return Err(format!("Local variable at index {} not found", local_idx));
         }
       }
-      OpCode::StoreVar => {
+      OpCode::StoreLocal => {
         let val = self.pop()?;
         let local_idx = instr.arg as usize;
         let actual_idx = self.base_pointer + local_idx;
-        // Grow variables vector if needed
-        while self.variables.len() <= actual_idx {
-          self.variables.push(Value::Nil);
+
+        // Grow locals vector if needed
+        while self.locals.len() <= actual_idx {
+          self.locals.push(Value::Nil);
         }
 
-        self.variables[actual_idx] = val;
+        self.locals[actual_idx] = val;
+      }
+      OpCode::LoadUpvalue => {
+        let upvalue_idx = instr.arg as usize;
+
+        if upvalue_idx < self.upvalues.borrow().len() {
+          let val = self.upvalues.borrow()[upvalue_idx].clone();
+          self.push(val);
+        } else {
+          return Err(format!("Upvalue at index {} not found", upvalue_idx));
+        }
+      }
+      OpCode::StoreUpvalue => {
+        let val = self.pop()?;
+        let upvalue_idx = instr.arg as usize;
+
+        if upvalue_idx < self.upvalues.borrow().len() {
+          self.upvalues.borrow_mut()[upvalue_idx] = val;
+        } else {
+          return Err(format!("Upvalue at index {} not found", upvalue_idx));
+        }
+      }
+      OpCode::LoadGlobal => {
+        let global_idx = instr.arg as usize;
+
+        if let Some(val) = self.globals.get(&global_idx) {
+          self.push(val.clone());
+        } else {
+          return Err(format!("Global variable at index {} not found", global_idx));
+        }
+      }
+      OpCode::StoreGlobal => {
+        let val = self.pop()?;
+        let global_idx = instr.arg as usize;
+        self.globals.insert(global_idx, val);
       }
       OpCode::Add => {
         let b = self.pop()?;
@@ -482,7 +511,7 @@ impl VM {
         self.call_stack.push(frame);
 
         // Set new base pointer to current variable count
-        self.base_pointer = self.variables.len();
+        self.base_pointer = self.locals.len();
 
         // Jump to function
         self.pc = instr.arg as usize - 1;
@@ -496,7 +525,7 @@ impl VM {
           self.base_pointer = frame.base_pointer;
 
           // Clean up local variables from the returning function
-          self.variables.truncate(old_base);
+          self.locals.truncate(old_base);
 
           // Restore program counter
           self.pc = frame.return_addr;
@@ -695,7 +724,10 @@ impl VM {
       }
       OpCode::SetupForIn => {
         let iterable = self.pop()?;
-        let var_idx = instr.arg as usize;
+        let encoded = instr.arg;
+
+        let is_local = (encoded as u32 & 0x8000_0000) != 0;
+        let var_idx = (encoded as u32 & 0x7FFF_FFFF) as usize;
 
         let items = match iterable {
           Value::List(list_ref) => list_ref.borrow().clone(),
@@ -743,21 +775,27 @@ impl VM {
           items,
           index: 0,
           var_idx,
-          base_pointer: self.base_pointer, // Store current base pointer
+          base_pointer: if is_local { self.base_pointer } else { 0 },
+          is_local,
         });
       }
       OpCode::ForInNext => {
         if let Some(iterator) = self.for_in_stack.last_mut() {
           if iterator.index < iterator.items.len() {
             let item = iterator.items[iterator.index].clone();
-            let actual_idx = iterator.base_pointer + iterator.var_idx;
 
-            // Grow variables vector if needed
-            while self.variables.len() <= actual_idx {
-              self.variables.push(Value::Nil);
+            if iterator.is_local {
+              // Store in locals
+              let actual_idx = iterator.base_pointer + iterator.var_idx;
+              while self.locals.len() <= actual_idx {
+                self.locals.push(Value::Nil);
+              }
+              self.locals[actual_idx] = item;
+            } else {
+              // Store in globals
+              self.globals.insert(iterator.var_idx, item);
             }
 
-            self.variables[actual_idx] = item;
             iterator.index += 1;
           } else {
             self.pc = instr.arg as usize - 1;
@@ -1020,7 +1058,7 @@ impl VM {
                 constructor_instance: Some(instance_val.clone()), // Store instance
               };
               self.call_stack.push(frame);
-              self.base_pointer = self.variables.len();
+              self.base_pointer = self.locals.len();
               self.pc = init_addr - 1;
             }
           } else {
@@ -1169,7 +1207,7 @@ impl VM {
                     constructor_instance: None,
                   };
                   self.call_stack.push(frame);
-                  self.base_pointer = self.variables.len();
+                  self.base_pointer = self.locals.len();
                   self.pc = addr - 1;
                 }
               } else {
@@ -1258,7 +1296,7 @@ impl VM {
                   constructor_instance: None,
                 };
                 self.call_stack.push(frame);
-                self.base_pointer = self.variables.len();
+                self.base_pointer = self.locals.len();
                 self.pc = static_method.address - 1;
               } else {
                 return Err(format!("Static method '{}' not found", method));
@@ -1326,7 +1364,7 @@ impl VM {
                   },
                 };
                 self.call_stack.push(frame);
-                self.base_pointer = self.variables.len();
+                self.base_pointer = self.locals.len();
                 self.pc = addr - 1;
               } else {
                 return Err(format!(
@@ -1346,8 +1384,102 @@ impl VM {
       }
       OpCode::LoadSelf => {
         let self_idx = instr.arg as usize;
-        let val = self.variables[self_idx].clone();
+        let val = self.locals[self_idx].clone();
         self.push(val);
+      }
+
+      OpCode::MakeClosure => {
+        let upvalue_count = instr.arg as usize;
+
+        // Pop the function from stack
+        let func_val = self.pop()?;
+
+        if let Value::Function(func_def) = func_val {
+          // Capture upvalues from current scope
+          let mut captured_upvalues = Vec::new();
+
+          for i in 0..upvalue_count {
+            // For now, capture from current locals
+            // In a full implementation, we'd need to track which are local vs upvalue
+            let local_idx = self.base_pointer + i;
+            if local_idx < self.locals.len() {
+              captured_upvalues.push(self.locals[local_idx].clone());
+            } else {
+              captured_upvalues.push(Value::Nil);
+            }
+          }
+
+          let closure = Closure {
+            function: func_def,
+            upvalues: Rc::new(RefCell::new(captured_upvalues)),
+          };
+
+          self.push(Value::Closure(Rc::new(closure)));
+        } else {
+          return Err(format!(
+            "Expected function for MakeClosure, got {}",
+            func_val.type_name()
+          ));
+        }
+      }
+      OpCode::CallClosure => {
+        let arg_count = instr.arg as usize;
+
+        // Pop arguments
+        let mut args = Vec::new();
+        for _ in 0..arg_count {
+          args.push(self.pop()?);
+        }
+        args.reverse();
+
+        // Pop the callable (function or closure)
+        let callable = self.pop()?;
+
+        match callable {
+          Value::Function(func_def) => {
+            // Regular function call (no upvalues)
+            for arg in args {
+              self.push(arg);
+            }
+
+            let frame = StackFrame {
+              return_addr: self.pc,
+              base_pointer: self.base_pointer,
+              var_count: 0,
+              is_constructor: false,
+              constructor_instance: None,
+            };
+            self.call_stack.push(frame);
+            self.base_pointer = self.locals.len();
+            self.pc = func_def.address - 1;
+          }
+          Value::Closure(closure) => {
+            // Closure call - set up upvalues
+            // let saved_upvalues = self.upvalues.clone();
+            self.upvalues = closure.upvalues.clone();
+
+            for arg in args {
+              self.push(arg);
+            }
+
+            let frame = StackFrame {
+              return_addr: self.pc,
+              base_pointer: self.base_pointer,
+              var_count: 0,
+              is_constructor: false,
+              constructor_instance: None,
+            };
+            self.call_stack.push(frame);
+            self.base_pointer = self.locals.len();
+            self.pc = closure.function.address - 1;
+
+            // Store saved upvalues so we can restore them on return
+            // For now, we'll handle this in Return
+          }
+          _ => {
+            return Err(format!("Cannot call {} as function", callable.type_name()));
+          }
+        }
       }
       OpCode::MatchBegin | OpCode::MatchCase | OpCode::MatchEnd => {
         // Pattern matching is handled inline during compilation

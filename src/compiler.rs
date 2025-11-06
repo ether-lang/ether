@@ -8,22 +8,42 @@ use crate::{
   ast::{BinOp, Expr, Pattern, Stmt, UnOp},
   instruction::{Instruction, OpCode},
   module::ModuleLoader,
-  value::{ClassDef, MethodDef, Value},
+  value::{ClassDef, FunctionDef, MethodDef, Value},
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum VarLocation {
+  Local(usize),   // Local variable in current function
+  Upvalue(usize), // Upvalue (captured from parent)
+  Global(usize),  // Global variable
+}
+
+#[derive(Debug, Clone)]
+struct Upvalue {
+  index: usize,   // Index in parent's locals or upvalues
+  is_local: bool, // True if captures from immediate parent's local
+}
+
+#[derive(Debug, Clone)]
+struct FunctionCompiler {
+  enclosing: Option<Box<FunctionCompiler>>,
+  _function_name: String,
+  locals: Vec<String>,    // Local variable names in order
+  upvalues: Vec<Upvalue>, // Upvalues this function captures
+  _scope_depth: usize,    // Current scope depth (for blocks)
+}
 
 pub struct Compiler {
   instructions: Vec<Instruction>,
   constants: Vec<Value>,
-  var_indices: HashMap<String, usize>,
-  next_var_index: usize,
   pub function_addresses: HashMap<String, usize>,
   classes: HashMap<String, Rc<ClassDef>>,
   current_class: Option<String>,
-  scope_stack: Vec<HashMap<String, usize>>,
   module_loader: Option<ModuleLoader>,
   current_file: PathBuf,
-  global_var_names: HashMap<usize, String>,
-  is_in_global_scope: bool,
+  current_function: Option<Box<FunctionCompiler>>,
+  globals: HashMap<String, usize>, // Global variables
+  next_global_index: usize,
   is_repl: bool,
 }
 
@@ -32,16 +52,14 @@ impl Compiler {
     Compiler {
       instructions: Vec::new(),
       constants: Vec::new(),
-      var_indices: HashMap::new(),
-      next_var_index: 0,
       function_addresses: HashMap::new(),
       classes: HashMap::new(),
       current_class: None,
-      scope_stack: Vec::new(),
       module_loader: None,
       current_file: PathBuf::from("."),
-      global_var_names: HashMap::new(),
-      is_in_global_scope: true,
+      current_function: None,
+      globals: HashMap::new(),
+      next_global_index: 0,
       is_repl: false,
     }
   }
@@ -50,16 +68,14 @@ impl Compiler {
     Compiler {
       instructions: Vec::new(),
       constants: Vec::new(),
-      var_indices: HashMap::new(),
-      next_var_index: 0,
       function_addresses: HashMap::new(),
       classes: HashMap::new(),
       current_class: None,
-      scope_stack: Vec::new(),
       module_loader: None,
       current_file: PathBuf::from("."),
-      global_var_names: HashMap::new(),
-      is_in_global_scope: true,
+      current_function: None,
+      globals: HashMap::new(),
+      next_global_index: 0,
       is_repl: true,
     }
   }
@@ -70,6 +86,32 @@ impl Compiler {
 
   pub fn set_current_file(&mut self, path: PathBuf) {
     self.current_file = path;
+  }
+
+  pub fn get_global_var_names(&self) -> HashMap<usize, String> {
+    self.globals.iter().map(|(k, v)| (*v, k.clone())).collect()
+  }
+
+  fn get_var_index(&mut self, name: &str) -> usize {
+    // For cases where we just need an index (like classes, etc.)
+    // Check if local first
+    if let Some(ref func) = self.current_function {
+      for (i, local) in func.locals.iter().enumerate() {
+        if local == name {
+          return i;
+        }
+      }
+    }
+
+    // Otherwise treat as global
+    if let Some(&idx) = self.globals.get(name) {
+      return idx;
+    }
+
+    let idx = self.next_global_index;
+    self.globals.insert(name.to_string(), idx);
+    self.next_global_index += 1;
+    idx
   }
 
   fn add_constant(&mut self, value: Value) -> usize {
@@ -89,25 +131,81 @@ impl Compiler {
     self.constants.len() - 1
   }
 
-  fn get_var_index(&mut self, name: &str) -> usize {
-    if let Some(&idx) = self.var_indices.get(name) {
-      idx
-    } else {
-      let idx = self.next_var_index;
-      self.var_indices.insert(name.to_string(), idx);
-      self.next_var_index += 1;
+  fn resolve_local(&self, name: &str) -> Option<usize> {
+    if let Some(ref func) = self.current_function {
+      for (i, local_name) in func.locals.iter().enumerate().rev() {
+        if local_name == name {
+          return Some(i);
+        }
+      }
+    }
+    None
+  }
 
-      // If we're in global scope, record this as a global variable
-      if self.is_in_global_scope {
-        self.global_var_names.insert(idx, name.to_string());
+  fn add_upvalue(&mut self, index: usize, is_local: bool) -> usize {
+    if let Some(ref mut func) = self.current_function {
+      // Check if this upvalue already exists
+      for (i, upvalue) in func.upvalues.iter().enumerate() {
+        if upvalue.index == index && upvalue.is_local == is_local {
+          return i;
+        }
       }
 
-      idx
+      // Add new upvalue
+      let upvalue_index = func.upvalues.len();
+      func.upvalues.push(Upvalue { index, is_local });
+      upvalue_index
+    } else {
+      0
     }
   }
 
-  pub fn get_global_var_names(&self) -> &HashMap<usize, String> {
-    &self.global_var_names
+  fn resolve_upvalue(&mut self, name: &str) -> Option<usize> {
+    // Recursive function to resolve upvalues through enclosing scopes
+    if let Some(ref mut func) = self.current_function {
+      if let Some(ref mut enclosing) = func.enclosing {
+        // Try to find in enclosing function's locals
+        for (i, local_name) in enclosing.locals.iter().enumerate().rev() {
+          if local_name == name {
+            return Some(self.add_upvalue(i, true));
+          }
+        }
+
+        // Try to find in enclosing function's upvalues (recursive)
+        // This is complex - we'll simplify for now
+        // Just check one level up
+      }
+    }
+    None
+  }
+
+  fn resolve_variable(&mut self, name: &str) -> VarLocation {
+    // 1. Try local variables
+    if let Some(idx) = self.resolve_local(name) {
+      return VarLocation::Local(idx);
+    }
+
+    // 2. Try upvalues (from enclosing scopes)
+    if let Some(idx) = self.resolve_upvalue(name) {
+      return VarLocation::Upvalue(idx);
+    }
+
+    // 3. Must be global
+    if let Some(&idx) = self.globals.get(name) {
+      return VarLocation::Global(idx);
+    }
+
+    // Not found - create as global
+    let idx = self.next_global_index;
+    self.globals.insert(name.to_string(), idx);
+    self.next_global_index += 1;
+    VarLocation::Global(idx)
+  }
+
+  fn add_local(&mut self, name: String) {
+    if let Some(ref mut func) = self.current_function {
+      func.locals.push(name);
+    }
   }
 
   fn emit(&mut self, opcode: OpCode, arg: i32) {
@@ -116,27 +214,6 @@ impl Compiler {
 
   fn current_address(&self) -> usize {
     self.instructions.len()
-  }
-
-  fn enter_scope(&mut self) {
-    // Save current variable bindings
-    self.scope_stack.push(self.var_indices.clone());
-    // Reset for new scope
-    self.var_indices.clear();
-    self.next_var_index = 0;
-    self.is_in_global_scope = false; // We're no longer in global scope
-  }
-
-  fn exit_scope(&mut self) {
-    // Restore previous variable bindings
-    if let Some(prev_scope) = self.scope_stack.pop() {
-      self.var_indices = prev_scope;
-      // Recalculate next_var_index
-      self.next_var_index = self.var_indices.values().max().map(|v| v + 1).unwrap_or(0);
-
-      // If we're back at top level, we're in global scope
-      self.is_in_global_scope = self.scope_stack.is_empty();
-    }
   }
 
   fn compile_match_case_body(&mut self, body: &[Stmt]) -> Result<(), String> {
@@ -192,17 +269,48 @@ impl Compiler {
 
   fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
     match stmt {
-      Stmt::Let { name, value, .. } => {
+      Stmt::Let {
+        name,
+        value,
+        type_annotation: _,
+      } => {
+        // Compile the value
         self.compile_expr(value)?;
-        let idx = self.get_var_index(name);
-        self.emit(OpCode::StoreVar, idx as i32);
+
+        // Add as local if in function, otherwise global
+        if self.current_function.is_some() {
+          self.add_local(name.clone());
+          let local_count = if let Some(ref func) = self.current_function {
+            func.locals.len() - 1
+          } else {
+            0
+          };
+          self.emit(OpCode::StoreLocal, local_count as i32);
+        } else {
+          // Global variable
+          let location = self.resolve_variable(name);
+          if let VarLocation::Global(idx) = location {
+            self.emit(OpCode::StoreGlobal, idx as i32);
+          }
+        }
       }
       Stmt::Assign { name, value } => {
-        // Check if it's a field assignment (self.field = value)
-        // This is handled through normal assignment for now
+        // Compile the value
         self.compile_expr(value)?;
-        let idx = self.get_var_index(name);
-        self.emit(OpCode::StoreVar, idx as i32);
+
+        // Resolve where to store it
+        let location = self.resolve_variable(name);
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::StoreLocal, idx as i32);
+          }
+          VarLocation::Upvalue(idx) => {
+            self.emit(OpCode::StoreUpvalue, idx as i32);
+          }
+          VarLocation::Global(idx) => {
+            self.emit(OpCode::StoreGlobal, idx as i32);
+          }
+        }
       }
       Stmt::FieldAssign {
         object,
@@ -226,27 +334,41 @@ impl Compiler {
         self.emit(OpCode::IndexSet, 0);
       }
       Stmt::Function {
-        name, params, body, ..
+        name,
+        params,
+        body,
+        return_type: _,
       } => {
+        // Jump over the function body
         let jump_addr = self.current_address();
         self.emit(OpCode::Jump, 0);
 
         let func_addr = self.current_address();
         self.function_addresses.insert(name.clone(), func_addr);
 
-        // Enter new scope for function
-        self.enter_scope();
+        // Create a new function compiler context
+        let enclosing = self.current_function.take();
+        self.current_function = Some(Box::new(FunctionCompiler {
+          enclosing: enclosing.clone(),
+          _function_name: name.clone(),
+          locals: Vec::new(),
+          upvalues: Vec::new(),
+          _scope_depth: 0,
+        }));
 
-        // Store parameters (in reverse order since they're on stack)
-        for (param_name, param_type) in params.iter().rev() {
-          if let Some(expected_type) = param_type {
+        // Add parameters as local variables
+        for (param_name, _param_type) in params.iter() {
+          self.add_local(param_name.clone());
+        }
+
+        // Store parameters from stack (in reverse order)
+        for i in (0..params.len()).rev() {
+          if let Some((_param_name, Some(expected_type))) = params.get(i) {
             let type_const = self.add_constant(Value::String(format!("{}", expected_type)));
             self.emit(OpCode::LoadConst, type_const as i32);
             self.emit(OpCode::AssertType, 0);
           }
-
-          let idx = self.get_var_index(param_name);
-          self.emit(OpCode::StoreVar, idx as i32);
+          self.emit(OpCode::StoreLocal, i as i32);
         }
 
         // Compile function body
@@ -259,11 +381,53 @@ impl Compiler {
         self.emit(OpCode::LoadConst, const_idx as i32);
         self.emit(OpCode::Return, 0);
 
-        // Exit function scope
-        self.exit_scope();
+        // Get upvalue count
+        let upvalue_count = if let Some(ref func) = self.current_function {
+          func.upvalues.len()
+        } else {
+          0
+        };
+
+        // Restore enclosing function context
+        if let Some(mut current) = self.current_function.take() {
+          self.current_function = current.enclosing.take().map(|b| b);
+        }
 
         let end_addr = self.current_address();
         self.instructions[jump_addr].arg = end_addr as i32;
+
+        // Create function value
+        let func_def = FunctionDef {
+          name: name.clone(),
+          address: func_addr,
+          module_id: None,
+          upvalue_count,
+        };
+
+        if upvalue_count > 0 {
+          // This function needs closures - emit MakeClosure
+          let func_const = self.add_constant(Value::Function(Rc::new(func_def)));
+          self.emit(OpCode::LoadConst, func_const as i32);
+          self.emit(OpCode::MakeClosure, upvalue_count as i32);
+        } else {
+          // Regular function - just store it
+          let func_const = self.add_constant(Value::Function(Rc::new(func_def)));
+          self.emit(OpCode::LoadConst, func_const as i32);
+        }
+
+        // Store function in variable
+        let location = self.resolve_variable(name);
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::StoreLocal, idx as i32);
+          }
+          VarLocation::Upvalue(idx) => {
+            self.emit(OpCode::StoreUpvalue, idx as i32);
+          }
+          VarLocation::Global(idx) => {
+            self.emit(OpCode::StoreGlobal, idx as i32);
+          }
+        }
       }
       Stmt::Return { value } => {
         if let Some(v) = value {
@@ -327,8 +491,29 @@ impl Compiler {
       } => {
         self.compile_expr(iterable)?;
 
-        let var_idx = self.get_var_index(var_name);
-        self.emit(OpCode::SetupForIn, var_idx as i32);
+        let (var_idx, is_local) = if let Some(_) = self.current_function {
+          // Local variable
+          self.add_local(var_name.clone());
+          let idx = if let Some(ref func) = self.current_function {
+            func.locals.len() - 1
+          } else {
+            0
+          };
+          (idx, true)
+        } else {
+          // Global variable
+          let idx = self.get_var_index(var_name);
+          (idx, false)
+        };
+
+        // Encode: high bit for is_local, low bits for index
+        let encoded = if is_local {
+          var_idx as i32 | 0x8000_0000u32 as i32
+        } else {
+          var_idx as i32
+        };
+
+        self.emit(OpCode::SetupForIn, encoded);
 
         let loop_start = self.current_address();
         let end_jump = self.current_address();
@@ -366,8 +551,19 @@ impl Compiler {
         let catch_addr = self.current_address();
         if let Some(block) = catch_block {
           if let Some(var_name) = catch_var {
-            let idx = self.get_var_index(var_name);
-            self.emit(OpCode::StoreVar, idx as i32);
+            // Add catch variable as local
+            if let Some(_) = self.current_function {
+              self.add_local(var_name.clone());
+              let var_idx = if let Some(ref func) = self.current_function {
+                func.locals.len() - 1
+              } else {
+                0
+              };
+              self.emit(OpCode::StoreLocal, var_idx as i32);
+            } else {
+              let idx = self.get_var_index(var_name);
+              self.emit(OpCode::StoreGlobal, idx as i32);
+            }
           } else {
             self.emit(OpCode::Pop, 0);
           }
@@ -425,9 +621,6 @@ impl Compiler {
         // Add fields
         for (field_name, default_expr, is_private) in fields {
           let default_value = if let Some(_expr) = default_expr {
-            // Compile and evaluate the default expression
-            // For simplicity, we'll just use Nil for now
-            // You could extend this to evaluate constant expressions
             None
           } else {
             None
@@ -447,19 +640,37 @@ impl Compiler {
 
           let method_addr = self.current_address();
 
-          // Enter new scope for method
-          self.enter_scope();
+          // Create method function context
+          let enclosing = self.current_function.take();
+          self.current_function = Some(Box::new(FunctionCompiler {
+            enclosing: enclosing.clone(),
+            _function_name: method_name.clone(),
+            locals: Vec::new(),
+            upvalues: Vec::new(),
+            _scope_depth: 0,
+          }));
 
-          // Store parameters in REVERSE order (top to bottom of stack)
-          for (param_name, _) in params.iter().rev() {
-            let idx = self.get_var_index(param_name);
-            self.emit(OpCode::StoreVar, idx as i32);
+          // Add 'self' as first local (if not static)
+          if !is_static {
+            self.add_local("self".to_string());
           }
 
-          // Store self LAST (it's at the bottom of the stack)
+          // Add parameters as locals
+          for (param_name, _) in params.iter() {
+            self.add_local(param_name.clone());
+          }
+
+          // Store parameters from stack (in REVERSE order)
+          for i in (0..params.len()).rev() {
+            self.emit(
+              OpCode::StoreLocal,
+              (i + if *is_static { 0 } else { 1 }) as i32,
+            );
+          }
+
+          // Store self LAST (if not static)
           if !is_static {
-            let self_idx = self.get_var_index("self");
-            self.emit(OpCode::StoreVar, self_idx as i32);
+            self.emit(OpCode::StoreLocal, 0);
           }
 
           // Compile method body
@@ -472,8 +683,10 @@ impl Compiler {
           self.emit(OpCode::LoadConst, const_idx as i32);
           self.emit(OpCode::Return, 0);
 
-          // Exit method scope
-          self.exit_scope();
+          // Restore enclosing context
+          if let Some(mut current) = self.current_function.take() {
+            self.current_function = current.enclosing.take();
+          }
 
           let end_addr = self.current_address();
           self.instructions[jump_addr].arg = end_addr as i32;
@@ -502,8 +715,19 @@ impl Compiler {
         // Store class as a constant and bind to variable
         let const_idx = self.add_constant(Value::Class(class_rc));
         self.emit(OpCode::LoadConst, const_idx as i32);
-        let var_idx = self.get_var_index(name);
-        self.emit(OpCode::StoreVar, var_idx as i32);
+
+        let location = self.resolve_variable(name);
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::StoreLocal, idx as i32);
+          }
+          VarLocation::Upvalue(idx) => {
+            self.emit(OpCode::StoreUpvalue, idx as i32);
+          }
+          VarLocation::Global(idx) => {
+            self.emit(OpCode::StoreGlobal, idx as i32);
+          }
+        }
       }
       Stmt::Import { path, alias } => {
         let loader = self
@@ -521,10 +745,6 @@ impl Compiler {
         let binding_name = if let Some(alias_name) = alias {
           alias_name.clone()
         } else {
-          // Extract module name from path
-          // "std:http" -> "http"
-          // "dir/mod" -> "mod"
-          // "module" -> "module"
           path
             .split(&[':', '/'][..])
             .last()
@@ -532,8 +752,18 @@ impl Compiler {
             .to_string()
         };
 
-        let var_idx = self.get_var_index(&binding_name);
-        self.emit(OpCode::StoreVar, var_idx as i32);
+        let location = self.resolve_variable(&binding_name);
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::StoreLocal, idx as i32);
+          }
+          VarLocation::Upvalue(idx) => {
+            self.emit(OpCode::StoreUpvalue, idx as i32);
+          }
+          VarLocation::Global(idx) => {
+            self.emit(OpCode::StoreGlobal, idx as i32);
+          }
+        }
       }
       Stmt::Expr(expr) => {
         self.compile_expr(expr)?;
@@ -564,8 +794,18 @@ impl Compiler {
         self.emit(OpCode::LoadConst, idx as i32);
       }
       Expr::Ident(name) => {
-        let idx = self.get_var_index(name);
-        self.emit(OpCode::LoadVar, idx as i32);
+        let location = self.resolve_variable(name);
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::LoadLocal, idx as i32);
+          }
+          VarLocation::Upvalue(idx) => {
+            self.emit(OpCode::LoadUpvalue, idx as i32);
+          }
+          VarLocation::Global(idx) => {
+            self.emit(OpCode::LoadGlobal, idx as i32);
+          }
+        }
       }
       Expr::Binary { left, op, right } => {
         self.compile_expr(left)?;
@@ -621,15 +861,28 @@ impl Compiler {
           self.emit(opcode, 0);
         }
         _ => {
+          // Load the function/closure
+          let location = self.resolve_variable(name);
+          match location {
+            VarLocation::Local(idx) => {
+              self.emit(OpCode::LoadLocal, idx as i32);
+            }
+            VarLocation::Upvalue(idx) => {
+              self.emit(OpCode::LoadUpvalue, idx as i32);
+            }
+            VarLocation::Global(idx) => {
+              self.emit(OpCode::LoadGlobal, idx as i32);
+            }
+          }
+
+          // Push arguments
           for arg in args {
             self.compile_expr(arg)?;
           }
-          if let Some(&addr) = self.function_addresses.get(name) {
-            self.emit(OpCode::Call, addr as i32);
-          } else {
-              return Err(format!("Undefined function: {}", name));
-            }
-          }
+
+          // Call the function/closure
+          self.emit(OpCode::CallClosure, args.len() as i32);
+        }
       },
       Expr::Index { target, index } => {
         self.compile_expr(target)?;
@@ -719,8 +972,19 @@ impl Compiler {
               Some(true) // Need conditional jump
             }
             Pattern::Ident(name) => {
-              let var_idx = self.get_var_index(name);
-              self.emit(OpCode::StoreVar, var_idx as i32);
+              // Bind the matched value to this name
+              if let Some(_) = self.current_function {
+                self.add_local(name.clone());
+                let var_idx = if let Some(ref func) = self.current_function {
+                  func.locals.len() - 1
+                } else {
+                  0
+                };
+                self.emit(OpCode::StoreLocal, var_idx as i32);
+              } else {
+                let idx = self.get_var_index(name);
+                self.emit(OpCode::StoreGlobal, idx as i32);
+              }
               None // Always matches after binding
             }
             Pattern::List(patterns) => {
@@ -814,8 +1078,16 @@ impl Compiler {
         self.emit(OpCode::NewInstance, args.len() as i32);
       }
       Expr::SelfExpr => {
-        let idx = self.get_var_index("self");
-        self.emit(OpCode::LoadVar, idx as i32);
+        // 'self' is always a local variable (first local in methods)
+        let location = self.resolve_variable("self");
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::LoadLocal, idx as i32);
+          }
+          _ => {
+            return Err("'self' can only be used inside methods".to_string());
+          }
+        }
       }
       Expr::MethodCall {
         object,
@@ -838,8 +1110,15 @@ impl Compiler {
       }
       Expr::SuperCall { method, args } => {
         // Load self
-        let self_idx = self.get_var_index("self");
-        self.emit(OpCode::LoadVar, self_idx as i32);
+        let location = self.resolve_variable("self");
+        match location {
+          VarLocation::Local(idx) => {
+            self.emit(OpCode::LoadLocal, idx as i32);
+          }
+          _ => {
+            return Err("'super' can only be used inside methods".to_string());
+          }
+        }
 
         // Push arguments
         for arg in args {
@@ -856,6 +1135,18 @@ impl Compiler {
         }
 
         self.emit(OpCode::CallSuper, args.len() as i32);
+      }
+      Expr::CallExpr { callee, args } => {
+        // Compile the callee expression (could be anything that returns a function)
+        self.compile_expr(callee)?;
+
+        // Push arguments
+        for arg in args {
+          self.compile_expr(arg)?;
+        }
+
+        // Call whatever's on the stack
+        self.emit(OpCode::CallClosure, args.len() as i32);
       }
     }
     Ok(())

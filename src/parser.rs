@@ -807,6 +807,31 @@ impl Parser {
 
     loop {
       match &self.current().ttype {
+        TokenType::LParen => {
+          // Function call on the current expression
+          self.advance();
+          let mut args = Vec::new();
+
+          while !matches!(self.current().ttype, TokenType::RParen) {
+            args.push(self.parse_expression()?);
+            if matches!(self.current().ttype, TokenType::Comma) {
+              self.advance();
+            }
+          }
+
+          self.expect(|t| matches!(t, TokenType::RParen))?;
+
+          // Check if expr is a simple Ident - if so, keep as Call
+          if let Expr::Ident(name) = expr {
+            expr = Expr::Call { name, args };
+          } else {
+            // Otherwise use CallExpr for dynamic calls
+            expr = Expr::CallExpr {
+              callee: Box::new(expr),
+              args,
+            };
+          }
+        }
         TokenType::Dot => {
           self.advance();
           if let TokenType::Ident(member) = &self.current().ttype {
